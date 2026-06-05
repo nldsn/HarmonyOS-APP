@@ -1,0 +1,60 @@
+{
+  "color": [
+    {
+      "name": "start_window_background",
+      "value": "#000000"
+    },
+    {
+      "name": "hermes_orange",
+      "value": "#FF9554"
+    },
+    {
+      "name": "hermes_orange_light",
+      "value": "#3D2010"
+    },
+    {
+      "name": "hermes_orange_dark",
+      "value": "#E07830"
+    },
+    {
+      "name": "background",
+      "value": "#1C1C1E"
+    },
+    {
+      "name": "card_background",
+      "value": "#2C2C2E"
+    },
+    {
+      "name": "text_primary",
+      "value": "#EBEBF5"
+    },
+    {
+      "name": "text_secondary",
+      "value": "#8E8E93"
+    },
+    {
+      "name": "tab_gradient_mask",
+      "value": "#FF1C1C1E"
+    },
+    {
+      "name": "overlay_dim",
+      "value": "#80000000"
+    },
+    {
+      "name": "episode_card",
+      "value": "#252528"
+    },
+    {
+      "name": "episode_card_accent",
+      "value": "#3D2010"
+    },
+    {
+      "name": "tag_background",
+      "value": "#3A3A3C"
+    },
+    {
+      "name": "star_gold",
+      "value": "#F5A623"
+    }
+  ]
+}
