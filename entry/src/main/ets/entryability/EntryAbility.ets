@@ -1,69 +1,47 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
-import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
-
-const DOMAIN = 0x0000;
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     try {
       this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
     } catch (err) {
-      hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
+      // 静默失败
     }
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
   }
 
   onDestroy(): void {
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onDestroy');
+    // Ability 销毁
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
-    // Main window is created, set main page for this ability
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageCreate');
-
     windowStage.loadContent('pages/MainPage', (err) => {
       if (err.code) {
-        hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
         return;
       }
-      hilog.info(DOMAIN, 'testTag', 'Succeeded in loading the content.');
 
-      // Configure immersive display for the light-sensing tab bar effect
+      // 沉浸式显示配置 — 适配底部光感导航栏
       const windowClass = windowStage.getMainWindowSync();
       if (windowClass) {
-        // Enable full-screen immersive layout — content extends behind system bars
-        windowClass.setWindowLayoutFullScreen(true, (layoutErr: Error) => {
-          if (layoutErr) {
-            hilog.error(DOMAIN, 'testTag', 'Failed to setWindowLayoutFullScreen. Cause: %{public}s', JSON.stringify(layoutErr));
-          }
-        });
+        windowClass.setWindowLayoutFullScreen(true);
 
-        // Set system navigation bar properties — transparent with blur overlay
         windowClass.setWindowSystemBarProperties({
           navigationBarColor: '#00000000',
           navigationBarContentColor: '#000000'
-        }, (barErr: Error) => {
-          if (barErr) {
-            hilog.error(DOMAIN, 'testTag', 'Failed to setWindowSystemBarProperties. Cause: %{public}s', JSON.stringify(barErr));
-          }
         });
       }
     });
   }
 
   onWindowStageDestroy(): void {
-    // Main window is destroyed, release UI related resources
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageDestroy');
+    // 窗口销毁
   }
 
   onForeground(): void {
-    // Ability has brought to foreground
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onForeground');
+    // 前台
   }
 
   onBackground(): void {
-    // Ability has back to background
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
+    // 后台
   }
 }

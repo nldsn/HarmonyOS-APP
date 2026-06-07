@@ -1,12 +1,24 @@
 import { router } from '@kit.ArkUI'
-import { SiteRepository } from '../services/SiteRepository'
-import { ProtocolRouter } from '../services/ProtocolRouter'
-import {
-  SiteInfo,
-  VodItem,
-  CategoryWithVods,
-  CategoryPageResult
-} from '../models/SiteData'
+
+/**
+ * 首页 — 视频网格展示（UI 样式模板，数据为硬编码示例）
+ *
+ * 品牌色：爱马仕橙 #F37021
+ */
+
+// ── 本地数据类型 ──────────────────────────────────
+interface VodItem {
+  vod_id: string
+  vod_name: string
+  vod_pic: string
+  vod_remarks: string
+}
+
+interface CategoryWithVods {
+  type_id: string
+  type_name: string
+  vods: VodItem[]
+}
 
 interface SiteSimple {
   key: string
@@ -18,37 +30,66 @@ interface SiteMenuItem {
   action: () => void
 }
 
+// ── 硬编码示例站点 ──────────────────────────────────
+const DEMO_SITES: SiteSimple[] = [
+  { key: 'site1', name: '示例站点A' },
+  { key: 'site2', name: '示例站点B' },
+  { key: 'site3', name: '示例站点C' },
+]
+
+const DEMO_POSTER: string = 'https://via.placeholder.com/300x420/333333/F37021?text=Poster'
+
+// ── 硬编码示例分类 + 视频 ──────────────────────────
+const DEMO_CATEGORIES: CategoryWithVods[] = [
+  {
+    type_id: '1',
+    type_name: '推荐',
+    vods: [
+      { vod_id: '1', vod_name: '示例电影 - 星际穿越', vod_pic: DEMO_POSTER, vod_remarks: '9.4分' },
+      { vod_id: '2', vod_name: '示例电影 - 盗梦空间', vod_pic: DEMO_POSTER, vod_remarks: '9.3分' },
+      { vod_id: '3', vod_name: '示例电影 - 肖申克的救赎', vod_pic: DEMO_POSTER, vod_remarks: '9.7分' },
+      { vod_id: '4', vod_name: '示例电影 - 阿甘正传', vod_pic: DEMO_POSTER, vod_remarks: '9.5分' },
+      { vod_id: '5', vod_name: '示例剧集 - 权力的游戏', vod_pic: DEMO_POSTER, vod_remarks: '全8季' },
+      { vod_id: '6', vod_name: '示例剧集 - 绝命毒师', vod_pic: DEMO_POSTER, vod_remarks: '全5季' },
+    ]
+  },
+  {
+    type_id: '2',
+    type_name: '电影',
+    vods: []
+  },
+  {
+    type_id: '3',
+    type_name: '电视剧',
+    vods: []
+  },
+  {
+    type_id: '4',
+    type_name: '综艺',
+    vods: []
+  },
+  {
+    type_id: '5',
+    type_name: '动漫',
+    vods: []
+  },
+]
+
 @Component
 export struct HomePage {
-  @StorageLink('siteList') siteList: SiteSimple[] = []
-  @StorageLink('fullSiteList') fullSiteList: SiteInfo[] = []
+  @StorageLink('siteList') siteList: SiteSimple[] = DEMO_SITES
   @StorageProp('statusBarTop') statusBarTop: number = 44
 
-  @State private selectedSiteName: string = ''
-  @State private selectedSiteKey: string = ''
-  @State private categories: CategoryWithVods[] = []
+  @State private selectedSiteName: string = '示例站点A'
+  @State private selectedSiteKey: string = 'site1'
+  @State private categories: CategoryWithVods[] = DEMO_CATEGORIES
   @State private activeCategoryIndex: number = 0
   @State private isLoading: boolean = false
   @State private isLoadingCategory: boolean = false
   @State private errorMsg: string = ''
-  @State private baseUrl: string = ''
   @State private handlerName: string = ''
   @State private showUrlInput: boolean = false
   @State private urlInput: string = ''
-
-  private repository: SiteRepository = new SiteRepository()
-  private autoSelected: boolean = false
-
-  aboutToAppear(): void {
-    if (!this.autoSelected && !this.selectedSiteKey && this.siteList.length > 0) {
-      this.autoSelected = true
-      this.selectSite('玩偶', '玩偶')
-    }
-  }
-
-  aboutToDisappear(): void {
-    this.repository.release()
-  }
 
   build() {
     Column() {
@@ -60,13 +101,9 @@ export struct HomePage {
         this.buildLoading()
       } else if (this.errorMsg.length > 0 && this.categories.length === 0) {
         this.buildError()
-      } else if (this.selectedSiteKey.length === 0) {
-        this.buildEmpty()
       } else if (this.categories.length > 0) {
         this.buildCategoryTabs()
         this.buildVideoGrid()
-      } else if (this.baseUrl.length === 0 && this.handlerName.length === 0) {
-        this.buildUrlInput()
       } else {
         this.buildEmpty()
       }
@@ -100,19 +137,6 @@ export struct HomePage {
         }.alignItems(HorizontalAlign.Start)
       }
       Blank()
-      if (this.selectedSiteKey.length > 0 && this.baseUrl.length > 0) {
-        Button() {
-          SymbolGlyph($r('sys.symbol.link'))
-            .fontSize(18)
-            .fontColor([$r('app.color.hermes_orange')])
-        }
-        .width(32).height(32)
-        .backgroundColor(Color.Transparent)
-        .onClick(() => {
-          this.showUrlInput = !this.showUrlInput
-          this.urlInput = this.baseUrl
-        })
-      }
     }
     .width('100%')
     .padding({ left: 16, top: 12 + this.statusBarTop, right: 16, bottom: 12 })
@@ -124,9 +148,6 @@ export struct HomePage {
       Blank()
       LoadingProgress().width(40).height(40).color($r('app.color.hermes_orange'))
       Text('正在拉取站点数据...').fontSize(14).fontColor($r('app.color.text_secondary'))
-      if (this.handlerName.length > 0) {
-        Text('处理器: ' + this.handlerName).fontSize(11).fontColor($r('app.color.text_secondary'))
-      }
       Blank()
     }.width('100%').layoutWeight(1)
   }
@@ -140,9 +161,6 @@ export struct HomePage {
         .borderRadius(20).border({ width: 2, color: '#FF3B30' })
       Text(this.errorMsg).fontSize(14).fontColor($r('app.color.text_secondary'))
         .textAlign(TextAlign.Center).padding({ left: 40, right: 40 })
-      Button('重试').fontSize(14).fontColor(Color.White)
-        .backgroundColor($r('app.color.hermes_orange')).borderRadius(8).height(36)
-        .onClick(() => { this.loadSiteData() })
       Blank()
     }.width('100%').layoutWeight(1)
   }
@@ -151,51 +169,9 @@ export struct HomePage {
   buildEmpty() {
     Column({ space: 8 }) {
       Blank()
-      if (this.siteList.length === 0) {
-        Text('暂无站点数据').fontSize(14).fontColor($r('app.color.text_secondary'))
-        Text('请前往"设置"输入数据源地址并拉取').fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
-      } else {
-        Text('点击左上角按钮选择站点').fontSize(14)
-          .fontColor($r('app.color.text_secondary'))
-      }
-      Blank()
-    }.width('100%').layoutWeight(1)
-  }
-
-  @Builder
-  buildUrlInput() {
-    Column({ space: 16 }) {
-      Blank()
-      Text('需要配置站点地址').fontSize(16).fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
-      Text('该站点的地址未知，请手动输入域名').fontSize(13)
+      Text('暂无站点数据').fontSize(14).fontColor($r('app.color.text_secondary'))
+      Text('请前往"设置"页面配置数据源').fontSize(12)
         .fontColor($r('app.color.text_secondary'))
-
-      TextInput({ placeholder: '例如 https://www.wogg.net', text: this.urlInput })
-        .fontSize(14).placeholderColor($r('app.color.text_secondary'))
-        .backgroundColor($r('app.color.background')).borderRadius(10)
-        .height(44).width('70%')
-        .onChange((value: string) => { this.urlInput = value })
-
-      Button('确认并加载').fontSize(14).fontColor(Color.White)
-        .backgroundColor($r('app.color.hermes_orange')).borderRadius(8).height(40)
-        .onClick(() => {
-          let url: string = this.urlInput.trim()
-          if (url.length > 0) {
-            if (!url.startsWith('http://') && !url.startsWith('https://')) {
-              url = 'https://' + url
-            }
-            this.baseUrl = url
-            this.showUrlInput = false
-            this.loadSiteData()
-          }
-        })
-
-      if (this.errorMsg.length > 0) {
-        Text(this.errorMsg).fontSize(12).fontColor('#FF3B30')
-          .padding({ left: 20, right: 20 }).textAlign(TextAlign.Center)
-      }
       Blank()
     }.width('100%').layoutWeight(1)
   }
@@ -227,7 +203,7 @@ export struct HomePage {
           ? $r('app.color.hermes_orange')
           : $r('app.color.background')
       )
-      .onClick(() => { this.onCategoryClick(index) })
+      .onClick(() => { this.activeCategoryIndex = index })
   }
 
   @Builder
@@ -263,7 +239,7 @@ export struct HomePage {
         Column({ space: 8 }) {
           Blank()
           Text('该分类暂无数据').fontSize(14).fontColor($r('app.color.text_secondary'))
-          Text('点击上方分类自动加载').fontSize(12).fontColor($r('app.color.text_secondary'))
+          Text('点击上方分类可切换').fontSize(12).fontColor($r('app.color.text_secondary'))
           Blank()
         }.width('100%').layoutWeight(1)
       }
@@ -313,130 +289,27 @@ export struct HomePage {
           vod_id: vod.vod_id,
           vod_name: vod.vod_name,
           vod_pic: vod.vod_pic,
-          baseUrl: this.baseUrl,
-          siteKey: this.selectedSiteKey
         }
       })
     })
   }
 
-  // ═══════════════════════════════════════════════════
-  // 菜单
-  // ═══════════════════════════════════════════════════
-
+  // ── 站点下拉菜单 ──
   private menuItems(): SiteMenuItem[] {
     let items: SiteMenuItem[] = []
     for (let i = 0; i < this.siteList.length; i++) {
       let s: SiteSimple = this.siteList[i]
       let item: SiteMenuItem = {
         value: s.name,
-        action: () => { this.selectSite(s.key, s.name) }
+        action: () => {
+          this.selectedSiteKey = s.key
+          this.selectedSiteName = s.name
+          this.categories = DEMO_CATEGORIES
+          this.activeCategoryIndex = 0
+        }
       }
       items.push(item)
     }
     return items
-  }
-
-  // ═══════════════════════════════════════════════════
-  // 数据层（统一通过 SiteRepository）
-  // ═══════════════════════════════════════════════════
-
-  private selectSite(key: string, name: string): void {
-    this.selectedSiteKey = key
-    this.selectedSiteName = name
-    this.categories = []
-    this.activeCategoryIndex = 0
-    this.errorMsg = ''
-    this.handlerName = ''
-    this.repository.release()
-
-    // 先查注册表
-    let hasEntry: boolean = ProtocolRouter.hasKey(key)
-    if (hasEntry) {
-      this.baseUrl = ProtocolRouter.getDomainEntry(key)?.baseUrl ?? ''
-      this.loadSiteData()
-      return
-    }
-
-    // 需要手动输入 URL
-    this.baseUrl = ''
-    this.urlInput = ''
-    this.showUrlInput = true
-  }
-
-  private async loadSiteData(): Promise<void> {
-    if (this.baseUrl.length === 0) {
-      this.errorMsg = '请先配置站点地址'
-      return
-    }
-
-    this.isLoading = true
-    this.errorMsg = ''
-    this.categories = []
-    this.handlerName = ''
-
-    try {
-      // 使用 SiteRepository 统一入口
-      let handler = await this.repository.selectSite(this.selectedSiteKey, this.baseUrl)
-      if (handler === null) {
-        this.errorMsg = '该站点需要 WexGuard 代理支持，请先配置代理地址'
-        this.isLoading = false
-        return
-      }
-
-      this.handlerName = handler.name
-      let result: CategoryWithVods[] = await this.repository.fetchHome()
-      this.categories = result
-
-      if (result.length === 0) {
-        this.errorMsg = '站点已连接但返回了空数据'
-      }
-    } catch (err) {
-      let msg: string = '无法连接站点'
-      if (err instanceof Error) {
-        msg = err.message
-      }
-      this.errorMsg = msg + ' (' + this.baseUrl + ')'
-    } finally {
-      this.isLoading = false
-    }
-  }
-
-  private onCategoryClick(index: number): void {
-    this.activeCategoryIndex = index
-    if (this.categories[index].vods.length > 0) {
-      return // 已有数据，无需加载
-    }
-    if (!this.repository.isReady()) {
-      return
-    }
-    this.loadCategoryData(index)
-  }
-
-  private async loadCategoryData(index: number): Promise<void> {
-    let cat: CategoryWithVods = this.categories[index]
-    this.isLoadingCategory = true
-    try {
-      let result: CategoryPageResult = await this.repository.fetchCategory(cat.type_id, 1)
-
-      let updated: CategoryWithVods = {
-        type_id: cat.type_id,
-        type_name: cat.type_name,
-        vods: result.list
-      }
-      let newCats: CategoryWithVods[] = []
-      for (let i = 0; i < this.categories.length; i++) {
-        if (i === index) {
-          newCats.push(updated)
-        } else {
-          newCats.push(this.categories[i])
-        }
-      }
-      this.categories = newCats
-    } catch (_err) {
-      // silent fail — 分类加载失败不影响已显示的分类
-    } finally {
-      this.isLoadingCategory = false
-    }
   }
 }

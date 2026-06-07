@@ -1,52 +1,81 @@
 import { router } from '@kit.ArkUI'
-import { pasteboard } from '@kit.BasicServicesKit'
-import { SiteRepository } from '../services/SiteRepository'
-import { AppleCMSClient } from '../services/AppleCMSClient'
-import { QuarkClient, EpisodeInfo } from '../services/QuarkClient'
-import { VodDetail } from '../models/SiteData'
 
+/**
+ * 详情页 — 影视详情 UI 样式模板（数据为硬编码示例）
+ *
+ * 品牌色：爱马仕橙 #F37021
+ */
+
+// ── 本地数据类型 ──────────────────────────────────
 interface PlaySrc { name: string; eps: PlayEp[] }
 interface PlayEp { title: string; url: string; size?: number }
 interface MenuItem { value: string; action: () => void }
 
+// ── 硬编码示例数据 ─────────────────────────────────
+const DEMO_VOD_NAME: string = '星际穿越 Interstellar'
+const DEMO_VOD_PIC: string = 'https://via.placeholder.com/300x420/1a1a2e/F37021?text=Interstellar'
+const DEMO_TYPE_NAME: string = '科幻'
+const DEMO_YEAR: string = '2014'
+const DEMO_AREA: string = '美国'
+const DEMO_REMARKS: string = '9.4分'
+const DEMO_DIRECTOR: string = '克里斯托弗·诺兰'
+const DEMO_ACTOR: string = '马修·麦康纳 / 安妮·海瑟薇 / 杰西卡·查斯坦'
+const DEMO_CONTENT: string = '近未来的地球黄沙遍野，前NASA宇航员库珀在女儿墨菲的书房发现了奇怪的重力场现象，随即得知某个未知区域内前NASA成员仍在秘密进行拯救人类的计划。在布兰德教授的劝说下，库珀忍痛离开女儿，与艾米莉亚·布兰德等人一同搭乘宇宙飞船前往已知的三个最有可能适合人类居住的星球，穿越遥远的星系银河，感受一小时七年光阴的沧海桑田，窥见了未知星球和黑洞的壮伟与神秘。'
+
+const DEMO_SOURCES: PlaySrc[] = [
+  {
+    name: '蓝光1080P',
+    eps: [
+      { title: '星际穿越.BluRay.1080p.x264.DTS-HD.MA.5.1.mkv', url: '', size: 21474836480 },
+      { title: '星际穿越.BluRay.1080p.x264.DTS-HD.MA.5.1.part2.mkv', url: '', size: 10737418240 },
+      { title: '星际穿越.BluRay.1080p.x264.DTS-HD.MA.5.1.part3.mkv', url: '', size: 5368709120 },
+    ]
+  },
+  {
+    name: '4K超清',
+    eps: [
+      { title: '星际穿越.2014.IMAX.2160p.BluRay.HEVC.DTS-HD.MA.5.1.mkv', url: '', size: 42949672960 },
+    ]
+  },
+  {
+    name: '夸克云盘',
+    eps: [
+      { title: '星际穿越.1080p.特效中英字幕.mp4', url: '', size: 3221225472 },
+    ]
+  },
+]
+
 @Entry
 @Component
 struct DetailPage {
-  @State vodId: string = ''
-  @State vodName: string = ''
-  @State vodPic: string = ''
-  @State baseUrl: string = ''
-  @State vodContent: string = ''
-  @State vodActor: string = ''
-  @State vodDirector: string = ''
-  @State vodYear: string = ''
-  @State vodArea: string = ''
-  @State typeName: string = ''
-  @State vodRemarks: string = ''
-  @State sources: PlaySrc[] = []
-  @State isLoading: boolean = true
+  @State vodId: string = 'demo1'
+  @State vodName: string = DEMO_VOD_NAME
+  @State vodPic: string = DEMO_VOD_PIC
+  @State typeName: string = DEMO_TYPE_NAME
+  @State vodYear: string = DEMO_YEAR
+  @State vodArea: string = DEMO_AREA
+  @State vodRemarks: string = DEMO_REMARKS
+  @State vodDirector: string = DEMO_DIRECTOR
+  @State vodActor: string = DEMO_ACTOR
+  @State vodContent: string = DEMO_CONTENT
+  @State sources: PlaySrc[] = DEMO_SOURCES
+  @State isLoading: boolean = false
   @State errorMsg: string = ''
   @State showFullIntro: boolean = false
-  @State isResolvingCloud: boolean = false
   @State activeSourceIndex: number = 0
-
-  private repository: SiteRepository = new SiteRepository()
-  private siteKey: string = ''
 
   aboutToAppear(): void {
     let p: Record<string, Object> = router.getParams() as Record<string, Object>
     if (p !== null && p !== undefined) {
-      this.vodId = (p['vod_id'] as string) ?? ''
-      this.vodName = (p['vod_name'] as string) ?? ''
-      this.vodPic = (p['vod_pic'] as string) ?? ''
-      this.baseUrl = (p['baseUrl'] as string) ?? ''
-      this.siteKey = (p['siteKey'] as string) ?? ''
+      let name: string = (p['vod_name'] as string) ?? ''
+      if (name.length > 0) {
+        this.vodName = name
+      }
+      let pic: string = (p['vod_pic'] as string) ?? ''
+      if (pic.length > 0) {
+        this.vodPic = pic
+      }
     }
-    this.loadDetail()
-  }
-
-  aboutToDisappear(): void {
-    this.repository.release()
   }
 
   // ════════════════════════════════════════════
@@ -79,13 +108,12 @@ struct DetailPage {
   }
 
   // ════════════════════════════════════════════
-  // 超大英雄海报 — Emby 风格，只调大了图片
+  // 超大英雄海报 — Emby 风格
   // ════════════════════════════════════════════
 
   @Builder
   buildHero() {
     Column() {
-      // 模糊背景 + 海报 + 元数据
       Stack({ alignContent: Alignment.BottomStart }) {
         Image(this.vodPic)
           .width('100%').height(300)
@@ -202,14 +230,13 @@ struct DetailPage {
   }
 
   // ════════════════════════════════════════════
-  // 网盘选择 + 剧集区
+  // 剧集区
   // ════════════════════════════════════════════
 
   @Builder
   buildSourceSection() {
     if (this.sources.length > 0) {
       Column({ space: 8 }) {
-        // ── 标题行 + 网盘下拉 ──
         Row() {
           Text('剧集').fontSize(16).fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.text_primary'))
@@ -238,7 +265,6 @@ struct DetailPage {
         }
         .width('100%').padding({ left: 20, right: 20, top: 12 })
 
-        // ── 剧集横向滑动 ──
         this.buildEpisodeRow()
       }.width('100%')
     }
@@ -262,25 +288,22 @@ struct DetailPage {
   @Builder
   buildEpisodeCard(ep: PlayEp, epIdx: number) {
     Column({ space: 4 }) {
-      // 缩略图占位
       Stack({ alignContent: Alignment.Center }) {
         Column()
           .width(140).aspectRatio(1.6).borderRadius(10)
           .backgroundColor($r('app.color.episode_card'))
-        // 集数编号
+
         Text(this.formatEpNum(epIdx))
           .fontSize(36).fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.hermes_orange')).opacity(0.22)
       }
       .width(140)
 
-      // 文件名
       Text(ep.title)
         .fontSize(11).fontColor($r('app.color.text_primary'))
         .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
         .lineHeight(15).width(140)
 
-      // 大小
       if (this.epHasSize(ep)) {
         Text(this.epSizeText(ep))
           .fontSize(10).fontColor($r('app.color.text_secondary'))
@@ -288,14 +311,6 @@ struct DetailPage {
       }
     }
     .width(140)
-    .onClick(() => {
-      if (ep.url.length > 0) {
-        try {
-          let data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, ep.url)
-          pasteboard.getSystemPasteboard().setData(data)
-        } catch (_e) { /* ignore */ }
-      }
-    })
   }
 
   // ════════════════════════════════════════════
@@ -326,13 +341,13 @@ struct DetailPage {
       Button('重试').fontSize(14).fontColor(Color.White)
         .backgroundColor($r('app.color.hermes_orange')).borderRadius(20)
         .height(40).padding({ left: 24, right: 24 })
-        .onClick(() => { this.loadDetail() })
+        .onClick(() => { this.isLoading = false; this.errorMsg = '' })
       Blank()
     }.width('100%').layoutWeight(1)
   }
 
   // ════════════════════════════════════════════
-  // HELPERS
+  // HELPERS（纯展示逻辑）
   // ════════════════════════════════════════════
 
   private sourceMenuItems(): MenuItem[] {
@@ -374,179 +389,5 @@ struct DetailPage {
     let size: number = s
     while (size >= 1024 && idx < units.length - 1) { size = size / 1024; idx++ }
     return size.toFixed(2) + ' ' + units[idx]
-  }
-
-  // ════════════════════════════════════════════
-  // DATA LOADING
-  // ════════════════════════════════════════════
-
-  private loadDetail(): void {
-    if (this.vodId.length === 0 || this.baseUrl.length === 0) {
-      this.isLoading = false; this.errorMsg = '参数错误'; return
-    }
-    this.isLoading = true; this.errorMsg = ''
-
-    this.repository.selectSite(this.siteKey, this.baseUrl).then(() => {
-      if (!this.repository.isReady()) { this.loadDetailFallback(); return }
-      this.repository.fetchDetail(this.vodId).then((detail: VodDetail | null) => {
-        if (detail !== null && detail.vod_name.length > 0) {
-          this.applyDetail(detail); this.isLoading = false
-        } else { this.loadDetailFallback() }
-      }).catch((_e: Error) => { this.loadDetailFallback() })
-    }).catch((_e: Error) => { this.loadDetailFallback() })
-  }
-
-  private loadDetailFallback(): void {
-    if (this.baseUrl.indexOf('wogg.net') >= 0 ||
-        this.baseUrl.indexOf('xb6v.com') >= 0 ||
-        this.baseUrl.indexOf('666291.xyz') >= 0 ||
-        this.baseUrl.indexOf('leijing1') >= 0 ||
-        this.baseUrl.indexOf('nivodz.com') >= 0 ||
-        this.baseUrl.indexOf('ffzyapi.com') >= 0 ||
-        this.baseUrl.indexOf('rbotv.cn') >= 0 ||
-        this.baseUrl.indexOf('lzcaiji.com') >= 0 ||
-        this.baseUrl.indexOf('ikanbot.com') >= 0) {
-      this.isLoading = false; this.errorMsg = '详情加载失败，请重试'; return
-    }
-    let nm: RegExpMatchArray | null = this.vodId.match(/(\d+)/)
-    let nid: string = nm !== null && nm[1] !== undefined ? nm[1] : this.vodId
-    let c: AppleCMSClient = new AppleCMSClient(this.baseUrl, 5000)
-    c.fetchDetail(nid).then((raw: Object | null) => {
-      if (raw !== null) {
-        let list: Object[] = ((raw as Record<string, Object>)['list'] as Object[]) ?? []
-        if (list.length > 0) { this.applyRawDetail(list[0] as Record<string, Object>); this.isLoading = false; return }
-      }
-      this.isLoading = false; this.errorMsg = '加载失败'
-    }).catch((_e: Error) => { this.isLoading = false; this.errorMsg = '网络错误' })
-  }
-
-  private applyDetail(d: VodDetail): void {
-    this.vodName = this.pick(d.vod_name, this.vodName)
-    if (this.vodPic.length === 0 && d.vod_pic.length > 0) { this.vodPic = d.vod_pic }
-    this.vodContent = d.vod_content; this.vodActor = d.vod_actor
-    this.vodDirector = d.vod_director; this.vodYear = d.vod_year
-    this.vodArea = d.vod_area; this.typeName = d.type_name
-    this.vodRemarks = d.vod_remarks
-    this.doResolve(d.vod_play_from, d.vod_play_url)
-  }
-
-  private applyRawDetail(d: Record<string, Object>): void {
-    this.vodName = this.pick(d['vod_name'] as string, this.vodName)
-    if (this.vodPic.length === 0) { this.vodPic = this.pick(d['vod_pic'] as string, '') }
-    this.vodContent = this.pick(d['vod_content'] as string, '')
-    this.vodActor = this.pick(d['vod_actor'] as string, '')
-    this.vodDirector = this.pick(d['vod_director'] as string, '')
-    this.vodYear = this.pick(d['vod_year'] as string, '')
-    this.vodArea = this.pick(d['vod_area'] as string, '')
-    this.typeName = this.pick(d['type_name'] as string, '')
-    this.vodRemarks = this.pick(d['vod_remarks'] as string, '')
-    this.doResolve(this.pick(d['vod_play_from'] as string, ''), this.pick(d['vod_play_url'] as string, ''))
-  }
-
-  private pick(a: string | undefined, b: string): string {
-    return (a !== undefined && a !== null && a.length > 0) ? a : b
-  }
-
-  // ════════════════════════════════════════════
-  // CLOUD DRIVE RESOLUTION
-  // ════════════════════════════════════════════
-
-  private doResolve(pf: string, pu: string): void {
-    if (pu.length === 0) { return }
-    let isCloud: boolean = pu.indexOf('pan.quark.cn') >= 0 ||
-      pu.indexOf('aliyundrive.com') >= 0 || pu.indexOf('drive.uc.cn') >= 0 ||
-      pu.indexOf('pan.baidu.com') >= 0 || pu.indexOf('cloud.189.cn') >= 0 ||
-      pu.indexOf('115.com') >= 0
-
-    if (isCloud) {
-      let urls: string[] = pu.split('#')
-      let cloudSources: PlaySrc[] = []
-      for (let i = 0; i < urls.length; i++) {
-        let u: string = urls[i].trim()
-        if (u.length === 0) { continue }
-        let driveName: string = this.cloudDriveName(u)
-        cloudSources.push({ name: driveName + '(解析中...)', eps: [{ title: '正在获取...', url: u }] })
-      }
-      if (cloudSources.length > 0) {
-        this.sources = cloudSources
-        this.activeSourceIndex = 0
-        this.resolveCloudUrls()
-      }
-      return
-    }
-    this.doParsePU(pf, pu)
-  }
-
-  private cloudDriveName(url: string): string {
-    if (url.indexOf('pan.quark.cn') >= 0) { return '夸克云盘' }
-    if (url.indexOf('aliyundrive.com') >= 0) { return '阿里云盘' }
-    if (url.indexOf('drive.uc.cn') >= 0) { return 'UC网盘' }
-    if (url.indexOf('pan.baidu.com') >= 0) { return '百度网盘' }
-    if (url.indexOf('cloud.189.cn') >= 0) { return '天翼云盘' }
-    if (url.indexOf('115.com') >= 0) { return '115网盘' }
-    return '云盘资源'
-  }
-
-  private async resolveCloudUrls(): Promise<void> {
-    this.isResolvingCloud = true
-    let quarkClient: QuarkClient = new QuarkClient(12000)
-    let newSources: PlaySrc[] = []
-
-    for (let i = 0; i < this.sources.length; i++) {
-      let src: PlaySrc = this.sources[i]
-      let url: string = src.eps.length > 0 ? src.eps[0].url : ''
-      if (url.length === 0) { newSources.push(src); continue }
-
-      let driveName: string = this.cloudDriveName(url)
-      try {
-        let episodes: EpisodeInfo[] = []
-        if (url.indexOf('pan.quark.cn') >= 0) { episodes = await quarkClient.getEpisodes(url) }
-        if (episodes.length > 0) {
-          let eps: PlayEp[] = []
-          for (let j = 0; j < episodes.length; j++) {
-            eps.push({ title: episodes[j].title, url: episodes[j].url, size: episodes[j].size })
-          }
-          newSources.push({ name: driveName, eps: eps })
-        } else {
-          newSources.push({ name: driveName + '(需App内打开)', eps: [{ title: url, url: url }] })
-        }
-      } catch (_e) {
-        newSources.push({ name: driveName + '(解析失败)', eps: [{ title: url, url: url }] })
-      }
-    }
-
-    this.sources = newSources
-    this.activeSourceIndex = 0
-    this.isResolvingCloud = false
-  }
-
-  private doParsePU(pf: string, pu: string): void {
-    if (pf.length === 0 || pu.length === 0) { return }
-    let sl: PlaySrc[] = []
-    let fns: string[] = pf.split('$$$')
-    let ubs: string[] = pu.split('$$$')
-    let lim: number = fns.length < ubs.length ? fns.length : ubs.length
-    for (let i = 0; i < lim; i++) {
-      let nm: string = fns[i].trim()
-      let bl: string = ubs[i].trim()
-      if (nm.length === 0 || bl.length === 0) { continue }
-      let eps: PlayEp[] = []
-      let pts: string[] = bl.split('#')
-      for (let j = 0; j < pts.length; j++) {
-        let pt: string = pts[j].trim()
-        if (pt.length === 0) { continue }
-        let di: number = pt.indexOf('$')
-        if (di >= 0) {
-          let t: string = pt.substring(0, di).trim()
-          let eu: string = pt.substring(di + 1).trim()
-          if (t.length > 0) { eps.push({ title: t, url: eu }) }
-        } else {
-          eps.push({ title: pt, url: pt })
-        }
-      }
-      if (eps.length > 0) { sl.push({ name: nm, eps: eps }) }
-    }
-    this.sources = sl
-    this.activeSourceIndex = 0
   }
 }
