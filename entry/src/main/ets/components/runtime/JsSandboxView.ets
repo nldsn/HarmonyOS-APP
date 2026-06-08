@@ -28,10 +28,7 @@ export struct JsSandboxView {
       return ''
     }
     let result = await this.controller.runJavaScript(script)
-    if (typeof result === 'string') {
-      return result
-    }
-    return result.toString()
+    return result
   }
 
   private startPolling(): void {
