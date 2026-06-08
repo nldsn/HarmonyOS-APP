@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": ".github/skills/harmonyos-ark/hooks/post-edit-arkts-scan.sh",
+        "powershell": ".github/skills/harmonyos-ark/hooks/post-edit-arkts-scan.ps1",
+        "timeoutSec": 30
+      },
+      {
+        "type": "command",
+        "bash": ".github/skills/harmonyos-ark/hooks/post-edit-acl-check.sh",
+        "powershell": ".github/skills/harmonyos-ark/hooks/post-edit-acl-check.ps1",
+        "timeoutSec": 15
+      }
+    ]
+  }
+}

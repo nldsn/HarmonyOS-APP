@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CobranderTV JS Sandbox</title>
+</head>
+<body>
+<script>
+  window.CobranderSandbox = {
+    loaded: false,
+    lastError: '',
+    buffer: '',
+    resetBundle: function() {
+      window.CobranderSandbox.loaded = false;
+      window.CobranderSandbox.lastError = '';
+      window.CobranderSandbox.buffer = '';
+      return JSON.stringify({ ok: true, message: 'reset' });
+    },
+    appendBundle: function(chunk) {
+      window.CobranderSandbox.buffer += chunk;
+      return JSON.stringify({
+        ok: true,
+        length: window.CobranderSandbox.buffer.length
+      });
+    },
+    evaluateBundle: function() {
+      return window.CobranderSandbox.loadBundle(window.CobranderSandbox.buffer);
+    },
+    loadBundle: function(source) {
+      try {
+        (0, eval)(source);
+        window.CobranderSandbox.loaded = true;
+        window.CobranderSandbox.lastError = '';
+        return window.CobranderSandbox.detect();
+      } catch (err) {
+        window.CobranderSandbox.loaded = false;
+        window.CobranderSandbox.lastError = String(err);
+        return JSON.stringify({ ok: false, message: String(err) });
+      }
+    },
+    detect: function() {
+      var features = [];
+      if (typeof globalThis.websiteBundle === 'function') {
+        features.push('websiteBundle');
+      }
+      if (typeof module !== 'undefined') {
+        features.push('module');
+      }
+      if (typeof globalThis.websiteBundle === 'string') {
+        features.push('websiteBundleString');
+      }
+      if (String(globalThis.websiteBundle).indexOf('/full-config') >= 0) {
+        features.push('fullConfigRoute');
+      }
+      if (String(globalThis.websiteBundle).indexOf('/sites/list') >= 0) {
+        features.push('sitesListRoute');
+      }
+      if (String(globalThis.websiteBundle).indexOf('catServerFactory') >= 0) {
+        features.push('catServerFactory');
+      }
+      return JSON.stringify({
+        ok: window.CobranderSandbox.loaded,
+        features: features,
+        websiteBundleType: typeof globalThis.websiteBundle,
+        error: window.CobranderSandbox.lastError
+      });
+    },
+    serverProbe: function() {
+      var bundleText = String(globalThis.websiteBundle || '');
+      return JSON.stringify({
+        ok: bundleText.length > 0,
+        length: bundleText.length,
+        hasFullConfig: bundleText.indexOf('/full-config') >= 0,
+        hasSitesList: bundleText.indexOf('/sites/list') >= 0,
+        hasCatServerFactory: bundleText.indexOf('catServerFactory') >= 0,
+        hasStart: bundleText.indexOf('function Lpr') >= 0 || bundleText.indexOf('function start') >= 0
+      });
+    }
+  };
+</script>
+</body>
+</html>

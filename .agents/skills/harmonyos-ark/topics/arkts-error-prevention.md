@@ -1,0 +1,167 @@
+# ArkTS 历史错误防回归档案（CodeWrench）
+
+## Scope
+- 记录本仓已真实出现过的 ArkTS 编译错误、运行时崩溃与高频告警
+- 给出“错误现象 -> 根因模式 -> 固化修复动作 -> 防回归门禁”
+- 作为 `topics/arkts.md` 的故障复盘补充，不替代官方 API 文档
+
+## 历史错误档案（按优先级）
+
+| 等级 | 现象/错误码 | 根因模式 | 固化修复动作 |
+| --- | --- | --- | --- |
+| P0 | 运行时崩溃：`Illegal variable value error with decorated variable @Prop 'onTap'` | `@Prop` 修饰函数回调（如 `@Prop onTap: () => void`） | 函数回调改为普通成员（不加 `@Prop`），调用方继续传函数 |
+| P0 | `10605999`：`void & Promise<Preferences>`、`Property 'get/put/flush' does not exist` | 直接 `await preferences.getPreferences(...)` + `hostContext` 可空 | 统一封装 `getPrefsStore()`：先判空 `hostContext`，再 `.then(...)` 获取 `Preferences`，并在调用前判空 |
+| P0 | `10605999`：`Property 'get' does not exist on type 'never'` | `.then()` 闭包内赋值变量（`store = value`），ArkTS 不追踪闭包赋值，变量类型仍为初始 `null`；经 `if (!store) return` 收窄后变成 `never` | 提取 `getPrefsStore()` 方法通过 `return` 返回值，不用闭包赋值；调用方 `const store = await this.getPrefsStore()` 获得正确类型 |
+| P0 | `10905210`：`@Entry` 组件 `build` 仅允许一个容器根节点 | DSL 解析错位或 `build` 结构被局部声明干扰 | `build()` 内只保留 UI DSL；辅助变量/逻辑抽到私有方法 |
+| P1 | `10505001`：属性冲突/类型不匹配（如 `size`、`onClick`、`ResourceStr -> Resource`） | 组件字段与链式 API 冲突，或资源参数类型不匹配 | `size -> ringSize`、`onClick -> onTap`，`SymbolGlyph` 参数使用 `Resource` |
+| P1 | `10505001`：`Property 'Black' does not exist on type 'typeof FontWeight'` | ArkTS `FontWeight` 枚举无 `Black`，Web/CSS 值照搬不兼容；同类问题：枚举成员名与 Web 端不一致 | 使用 ArkTS 可用值：`Lighter`/`Normal`/`Regular`/`Medium`/`Bold`/`Bolder`；`Black` → `Bolder`；写前先查 IDE 补全或官方 API 参考确认枚举成员 |
+| P1 | `10505001`：`'LengthMetrics' only refers to a type, but is being used as a value here` | 将类型当构造函数调用（如 `LengthMetrics.vp(16)`），但 ArkTS 中该符号仅为类型别名，不可直接实例化 | 改用对应的数值字面量或工厂函数；如 `LengthMetrics.vp(16)` → 直接传 `16`（单位默认 vp），或使用 `{ value: 16, unit: LengthUnit.VP }` 构造 |
+| P1 | `10605034` | 泛型推断受限（`Array.from({length...})`） | 改显式 `number[]` 构造，再 `ForEach` |
+| P1 | `10605038` / `10605040` | 未命名对象类型或对象字面量直接作为类型 | 抽离 `interface/type`，避免内联对象类型声明 |
+| P1 | `10605074`：`arkts-no-destruct-decls` | 解构声明（`const { a, b } = obj`）ArkTS 不支持 | 改为逐个赋值：`const a = obj.a; const b = obj.b;` |
+| P1 | `10605008`：`arkts-no-any-unknown` | 使用了 `any` / `unknown` 类型 | 替换为具体类型或 `interface`；泛型场景用 `<T>` 约束 |
+| P1 | `10605087`：`arkts-limited-throw` | `throw` 了 string / number / object 等任意值，或直接重抛未归一化的捕获值 | 统一抛 `Error` / 子类实例；`catch` 后重抛先 `instanceof Error` 判定，不是 `Error` 时包装成 `new Error(String(err))` |
+| P1 | `10605099` | spread 刷新状态（`{ ...state }`、`[...arr]`） | 改显式字段复制或 `slice()/concat()` |
+| P2 | `10903329`：`Unknown resource name 'xxx'` | 动态 `$r(...)`、不兼容 `sys.symbol.*` 名称，或未验证的 `ohos_ic_public_*` 系统图标资源名 | 静态资源字面量；使用前在 DevEco 资源面板 / 当前 SDK 搜索确认资源名存在；不存在时改为已验证资源或本地图标 |
+| P2 | deprecated 告警漂移：`animateTo`、`replaceUrl`、`getContext`、`AlertDialog.show`、`pushUrl`、`showDialog`、`showToast` | SDK 升级导致旧 API 逐步废弃 | 每次升级后先跑 guard 扫描，再按当前 SDK 推荐 API 迁移 |
+| P1 | WARN：`Function may throw exceptions. Special handling is required.` | 调用可能抛异常的函数（如 Preferences 读写、文件 I/O、网络请求）未用 try-catch 包裹 | 所有可能抛异常的调用必须 try-catch 或 async/await + catch；不可忽略此告警，累积后会导致运行时崩溃 |
+| P1 | `10605038`：`arkts-no-untyped-obj-literals` — Record 初始化对象字面量 | `Record<string, Object>` 等泛型工具类型初始化对象字面量，ArkTS 要求字面量必须对应显式声明的 class/interface | 声明 `interface` 替代 `Record<>`；如 `interface CardAction { action: string; params: CardParams }` |
+| P1 | `10905209`：`@Builder` 内写 `let` 声明 | `@Builder` 方法体仅允许 UI DSL 语法，`let` 等命令式语句触发编译错误 | 计算逻辑提取为 `private` 方法，`@Builder` 内用 `this.helperMethod()` 内联调用；`@State` 依赖传参数 |
+| P1 | `10905209`：`@Builder` 内 ForEach 回调写内联 UI | `@Builder` 中的 `ForEach` 回调内直接写 Column/Text 等内联 UI 组件，编译器报"Only UI component syntax"。外层为 Flex/Grid 时尤其高发 | 将 ForEach 回调中的内联 UI 提取为**独立 `@Builder` 方法**，ForEach 内仅调用 `this.buildXxx()`；同时移除 ForEach 未使用的 `index` 参数 |
+| P0 | `10505001` 连锁语法报错：`;` expected / `Declaration or statement expected` / `Cannot find name 'width'` | `build()` / `@Builder` 中 UI 组件遗漏 `}` / `)`、多余 `;`，或把 `.width()` 等属性链从组件表达式上断开，随后产生 10+ 无关假报错 | 遇到这组组合报错时**优先检查首个报错点前 10-20 行的 DSL 闭合与链式属性**；每个 UI 组件闭合后立刻接属性链，辅助逻辑移到私有方法 |
+| P1 | `10905348`：`The type of the '@StorageLink' property cannot be a class decorated with '@ObservedV2'` | 用 `@StorageLink` / `@LocalStorageLink` 绑定 `@ObservedV2` ViewModel / 类实例 | Storage 装饰器只存基础字段、数组或可序列化快照；`@ObservedV2` ViewModel 保持页面级实例，跨页只同步 `id` / `title` / `count` 等快照字段 |
+| P1 | `10505001`：`Type 'X[]' is not assignable to type 'ParticleTuple<A, B>'. Target requires 2 element(s)` | Particle 组件的 `color.range` 要求 `[ResourceColor, ResourceColor]` 固定 2 元素元组，但传入 `string[]` 动态数组，长度不匹配 | 改为固定 2 元素元组字面量：`range: ['#FFD700', '#FF6347'] as [ResourceColor, ResourceColor]`；多色需求用 `updater.config` 的关键帧分段 |
+| P1 | `10505001`：`Property 'setWindowColorMode' does not exist on type 'Window'` + `'ColorMode' does not exist on type 'typeof window'` | HarmonyOS NEXT API 12+ 已移除 `Window.setWindowColorMode()` 和 `window.ColorMode`，API 版本不匹配 | 改用 `context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_DARK)`；需 `import { ConfigurationConstant } from '@kit.AbilityKit'` |
+| P0 | **RollupError: Unexpected token** — hvigor 构建输出列出所有 .ets 文件但无具体行号 | 某个 `.ets` 文件有严重语法错误（未闭合括号、畸形 import、非法类型标注等），Rollup 解析器无法 tokenize 整个模块图 | **优先检查最近修改的文件**；用 IDE 打开逐个排查语法高亮异常；常见元凶：缺少闭合 `}`、`import` 语法错误、`as` 转换位置错误 |
+| P1 | `10505001`：`Property 'accessibilityLabel' does not exist on type 'XxxAttribute'` — Button/Row/Toggle/Text/TextInput/SymbolGlyph 等均报错 | ArkUI **没有** `.accessibilityLabel()` 链式属性。从 React Native / SwiftUI / Web ARIA 照搬命名，跨框架误用 | 改用 `.accessibilityText("标签文本")` 设置朗读文本；描述性说明用 `.accessibilityDescription()`；分组用 `.accessibilityGroup(true)` |
+| P1 | `10505001`：`Property 'LAYOUT_TYPE_TIMER' does not exist on type 'typeof LayoutType'` + `'title' does not exist in type 'LayoutData'` + `'number' not assignable to 'LiveView'` | LiveView（实况窗）API 枚举成员和接口字段与实际 SDK 不匹配，直接猜测 API 导致多处类型错误 | **使用 LiveView Kit 前必须查官方文档确认** `LayoutType` 可用枚举、`LayoutData` 接口字段、`liveViewManager` 方法签名；不可猜测 API |
+
+## 固化防回归流程（必做）
+
+1. 改动前扫描：
+```bash
+bash .codex/skills/harmonyos-ark/arkts-modernization-guard/scripts/scan-arkts-modernization.sh
+```
+
+2. 改动后扫描（必须 `passed`）：
+```bash
+bash .codex/skills/harmonyos-ark/arkts-modernization-guard/scripts/scan-arkts-modernization.sh
+```
+
+3. 编译验收（DevEco Studio 或 CLI）：
+```bash
+hvigor :entry:default@CompileArkTS
+```
+
+4. 最小运行时回归（至少）：
+- 进入首页，确认 `SafetyBanner` 可渲染且点击不崩溃
+- 进入设置页，确认 `SettingNavigate` 点击不崩溃
+- 走一遍 `CodesTab/LearningTab/SettingsTab` 的 Preferences 读写路径
+
+## 快速诊断矩阵
+
+- 日志含 `Illegal variable value ... @Prop ... function`
+- 先查：是否把函数回调写成 `@Prop`
+- 处理：去掉 `@Prop`，保留默认空函数
+
+- 日志含 `void & Promise<Preferences>`
+- 先查：是否 `await preferences.getPreferences(...)`
+- 处理：替换为 `getPrefsStore()` 封装模式
+
+- 日志含 `does not exist on type 'never'`（Preferences 相关）
+- 先查：是否在 `.then()` 闭包内赋值后用 `if (!store) return` 收窄
+- 处理：提取 `getPrefsStore()` 方法，通过 return 返回值而非闭包赋值
+
+- 日志含 `In an '@Entry' decorated component, the 'build' method can have only one root node`
+- 先查：`build()` 内是否混入局部变量声明/非 DSL 语句
+- 处理：抽出辅助方法，保持单容器根节点
+
+- 日志含 `throw statements cannot accept values of arbitrary types`
+- 先查：是否 `throw '...'` / `throw 123` / `throw {}`，或 `catch` 后直接 `throw err`
+- 处理：统一改 `throw new Error(...)`；重抛时先 `if (err instanceof Error) { throw err }`
+
+- 日志含 `';' expected` / `Declaration or statement expected` / `Cannot find name 'width'`
+- 先查：首个报错点前一段组件是否少 `}` / `)`、属性链是否被 `;` 或错误换行打断、是否把临时语句塞进 `build()` / `@Builder`
+- 处理：先修 DSL 结构，再看后续派生报错；`.width()` / `.height()` / `.onClick()` 必须紧跟组件表达式
+
+- 告警含 `Function may throw exceptions`
+- 先查：该行调用的函数是否涉及 Preferences/文件/网络等 I/O 操作
+- 处理：用 `try { ... } catch (err) { ... }` 包裹；async 函数中用 `await + try-catch`
+
+- 日志含 `Property 'Xxx' does not exist on type 'typeof EnumName'`
+- 先查：是否照搬了 Web/CSS 枚举值（如 `FontWeight.Black`）
+- 处理：查 IDE 补全或官方 API 参考确认 ArkTS 可用枚举成员；`FontWeight` 可用值为 `Lighter`/`Normal`/`Regular`/`Medium`/`Bold`/`Bolder`
+
+- 日志含 `only refers to a type, but is being used as a value here`
+- 先查：是否把类型别名当构造函数调用（如 `LengthMetrics.vp(16)`）
+- 处理：改用数值字面量（默认 vp）或 `{ value: 16, unit: LengthUnit.VP }` 结构
+
+- 日志含 `@StorageLink` property cannot be a class decorated with `@ObservedV2`
+- 先查：是否把 `@ObservedV2` ViewModel / class 实例放进了 `@StorageLink` / `@LocalStorageLink`
+- 处理：Storage 仅存快照字段；`@ObservedV2` ViewModel 保持页面级实例，按需从快照恢复
+
+- 日志含 `Unknown resource name`
+- 先查：`$r('sys.symbol.xxx')` 或 `$r('sys.media.ohos_ic_public_xxx')` 中的资源名是否在当前 SDK 中存在
+- 处理：在 DevEco 资源面板 / 当前 SDK 搜索确认资源名；不存在时改为已验证资源或本地图标
+
+- 日志含 `Target requires 2 element(s)` 或 `ParticleTuple`
+- 先查：Particle 的 color.range 是否传了动态数组而非 2 元素元组
+- 处理：改为 `[color1, color2] as [ResourceColor, ResourceColor]`
+
+- 日志含 `setWindowColorMode` does not exist
+- 先查：是否使用了 HarmonyOS NEXT 已移除的 Window 深色模式 API
+- 处理：改用 `context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.XXX)`
+
+- 日志含 `accessibilityLabel` does not exist
+- 先查：从 React Native / SwiftUI / Web ARIA 照搬了 `accessibilityLabel`
+- 处理：ArkUI 正确 API 为 `.accessibilityText()` / `.accessibilityDescription()`
+
+- 日志含 `LAYOUT_TYPE_TIMER` 或 `title not in LayoutData` 或 `number not assignable to LiveView`
+- 先查：LiveView 实况窗 API 是否凭猜测调用
+- 处理：必须查官方文档确认 LayoutType 枚举、LayoutData 字段、方法签名
+
+## 快速诊断流程图
+
+遇到编译/运行时错误时，按以下路径快速定位：
+
+```
+编译错误
+├─ **RollupError: Unexpected token** ?
+│  └─ 严重语法错误 → 检查最近修改的文件，逐个排查
+├─ 含 "does not exist on type" ?
+│  ├─ `accessibilityLabel` → ArkUI 无此属性，改 `.accessibilityText()`
+│  ├─ `setWindowColorMode` → API 12 已移除，用 ConfigurationConstant
+│  ├─ `LAYOUT_TYPE_TIMER` 等 Kit API → 查官方文档确认枚举/接口
+│  ├─ 枚举成员 → 查 P1 FontWeight 等枚举范围
+│  └─ 其他属性/方法 → 检查 SDK API 版本是否匹配
+├─ 含 "Target requires N element(s)" ?
+│  └─ ParticleTuple 等元组类型 → 改固定元素数元组字面量
+├─ 含 "not assignable to type 'never'" ?
+│  └─ 在 .then() 闭包内？ → P0 闭包类型收窄陷阱
+├─ 含 "used as a value" ?
+│  └─ 类型当构造器用 → P1 LengthMetrics 等纯类型
+├─ 含 "arkts-limited-throw" / "throw statements cannot accept values of arbitrary types" ?
+│  └─ throw 了非 Error 值 → 改 `throw new Error(...)`
+├─ 含 "@StorageLink" + "@ObservedV2" ?
+│  └─ Storage 装饰器绑定了 ViewModel → 改存快照字段，ViewModel 保持页面级
+├─ 含 "Unknown resource name" ?
+│  └─ sys.symbol / ohos_ic_public 名不存在 → P2 查 DevEco 资源面板
+├─ 含 "may throw exceptions" ?
+│  └─ 缺 try-catch → P1 异常函数必须捕获
+└─ 其他
+   └─ 复制完整错误码 → 查下方诊断矩阵或官方文档
+```
+
+## 关联资产
+- 守卫入口：`../arkts-modernization-guard/SKILL.md`
+- 错误映射：`../arkts-modernization-guard/references/error-to-fix-map.md`
+- 扫描脚本：`../arkts-modernization-guard/scripts/scan-arkts-modernization.sh`
+- 替换模板：`../arkts-modernization-guard/snippets/replacement-patterns.md`
+
+
+---
+
+## See Also
+
+- [ArkTS 主题](arkts.md)
+- [测试、签名与发布](testing-release.md)

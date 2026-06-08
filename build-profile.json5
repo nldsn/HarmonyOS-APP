@@ -5,13 +5,13 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "certpath": "C:\\Users\\12849\\.ohos\\config\\default_HarmonyOS-APP_t8vD_gA2jqgoyEUBWe32FIx4bYhrXpAhQMOstMlg2Ik=.cer",
+          "certpath": "C:\\Users\\12849\\.ohos\\config\\default_CobranderTV_Cns7AOAymKm3n0iqAqziCZIoDoIzNJHWSyZ1gss9Iak=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001B7591928A4C5FA2F99321EE383F30FEF7CE66BE94731CC84BEECBB4217B1AD89BA75A61CE7AE83A",
-          "profile": "C:\\Users\\12849\\.ohos\\config\\default_HarmonyOS-APP_t8vD_gA2jqgoyEUBWe32FIx4bYhrXpAhQMOstMlg2Ik=.p7b",
+          "keyPassword": "0000001B9981AED98AA73519F93737765DDE728B9A937E3D7D239F105B30EFA4E0ADC242E0421046C12465",
+          "profile": "C:\\Users\\12849\\.ohos\\config\\default_CobranderTV_Cns7AOAymKm3n0iqAqziCZIoDoIzNJHWSyZ1gss9Iak=.p7b",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "C:\\Users\\12849\\.ohos\\config\\default_HarmonyOS-APP_t8vD_gA2jqgoyEUBWe32FIx4bYhrXpAhQMOstMlg2Ik=.p12",
-          "storePassword": "0000001B269E7C6B6CAC4F74402B45A6EC9BE3255EE7492274B0C5FBAD05F8D76BCB88097A5BBF93F8F6AA"
+          "storeFile": "C:\\Users\\12849\\.ohos\\config\\default_CobranderTV_Cns7AOAymKm3n0iqAqziCZIoDoIzNJHWSyZ1gss9Iak=.p12",
+          "storePassword": "0000001BB7D64A68966384EB89EBAA23548FBA28F79DE26E5F72EC5E542007DA7D087A309BDB5964B94821"
         }
       }
     ],

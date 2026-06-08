@@ -166,6 +166,10 @@ struct Index {
   aboutToAppear(): void {
     // 标准 HarmonyOS 状态栏高度 44vp
     AppStorage.setOrCreate<number>('statusBarTop', 44)
+    AppStorage.setOrCreate<string>('jsSandboxScript', '')
+    AppStorage.setOrCreate<string>('jsSandboxCommand', '')
+    AppStorage.setOrCreate<string>('jsSandboxResult', '')
+    AppStorage.setOrCreate<string>('jsSandboxState', 'idle')
   }
 
   build() {
