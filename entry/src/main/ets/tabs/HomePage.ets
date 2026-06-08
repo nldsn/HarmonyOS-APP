@@ -1,4 +1,5 @@
 import { router } from '@kit.ArkUI'
+import { SiteSimple } from '../common/model/SourceModels'
 
 /**
  * 首页 — 视频网格展示（UI 样式模板，数据为硬编码示例）
@@ -20,18 +21,13 @@ interface CategoryWithVods {
   vods: VodItem[]
 }
 
-interface SiteSimple {
-  key: string
-  name: string
-}
-
 interface SiteMenuItem {
   value: string
   action: () => void
 }
 
 // ── 硬编码示例站点 ──────────────────────────────────
-const DEMO_SITES: SiteSimple[] = [
+export const DEMO_SITES: SiteSimple[] = [
   { key: 'site1', name: '示例站点A' },
   { key: 'site2', name: '示例站点B' },
   { key: 'site3', name: '示例站点C' },

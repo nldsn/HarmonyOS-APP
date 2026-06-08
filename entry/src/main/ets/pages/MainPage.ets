@@ -1,5 +1,6 @@
 import { HdsTabs, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit'
-import { HomePage } from '../tabs/HomePage'
+import { SiteSimple } from '../common/model/SourceModels'
+import { DEMO_SITES, HomePage } from '../tabs/HomePage'
 import { LivePage } from '../tabs/LivePage'
 import { SettingsPage } from '../tabs/SettingsPage'
 
@@ -170,6 +171,7 @@ struct Index {
     AppStorage.setOrCreate<string>('jsSandboxCommand', '')
     AppStorage.setOrCreate<string>('jsSandboxResult', '')
     AppStorage.setOrCreate<string>('jsSandboxState', 'idle')
+    AppStorage.setOrCreate<SiteSimple[]>('siteList', DEMO_SITES)
   }
 
   build() {

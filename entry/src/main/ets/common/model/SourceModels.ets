@@ -28,6 +28,11 @@ export interface SourceLoadResult {
   changed: boolean
 }
 
+export interface SiteSimple {
+  key: string
+  name: string
+}
+
 export class SourceStatus {
   static readonly READY: string = 'ready'
   static readonly FAILED: string = 'failed'

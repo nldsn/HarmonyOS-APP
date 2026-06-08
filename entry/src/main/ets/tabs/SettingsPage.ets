@@ -122,6 +122,9 @@ export struct SettingsPage {
   }
 
   private runSandboxProbe(): void {
+    if (this.isSandboxProbeRunning()) {
+      return
+    }
     let manager = this.pluginManager
     if (manager === null) {
       this.sandboxState = 'missing_manager'
@@ -135,6 +138,14 @@ export struct SettingsPage {
     this.sandboxScript = script
     this.sandboxResult = ''
     this.sandboxCommand = 'load'
+  }
+
+  private isSandboxProbeRunning(): boolean {
+    return this.sandboxState === 'loading' ||
+      this.sandboxState === 'injecting' ||
+      this.sandboxState.indexOf('injecting ') === 0 ||
+      this.sandboxState === 'evaluating' ||
+      this.sandboxState === 'probing'
   }
 
   private applyDetectResult(result: JsDetectResult): void {
@@ -244,7 +255,7 @@ export struct SettingsPage {
             })
 
           if (this.currentSource !== null) {
-            Button('运行沙箱探测')
+            Button(this.isSandboxProbeRunning() ? '沙箱探测中...' : '运行沙箱探测')
               .fontSize(15)
               .fontWeight(FontWeight.Medium)
               .fontColor($r('app.color.hermes_orange'))
@@ -252,6 +263,7 @@ export struct SettingsPage {
               .height(44)
               .borderRadius(10)
               .backgroundColor($r('app.color.card_background'))
+              .enabled(!this.isSandboxProbeRunning())
               .onClick(() => {
                 this.runSandboxProbe()
               })
@@ -353,7 +365,7 @@ export struct SettingsPage {
 
   private infoValueMaxLines(label: string): number {
     if (label === '沙箱结果') {
-      return 8
+      return 18
     }
     if (label === '脚本地址') {
       return 3

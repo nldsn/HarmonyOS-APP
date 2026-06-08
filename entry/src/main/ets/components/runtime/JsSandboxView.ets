@@ -10,6 +10,7 @@ export struct JsSandboxView {
   private controller: webview.WebviewController = new webview.WebviewController()
   private timerId: number = -1
   private chunkSize: number = 32768
+  private isRunning: boolean = false
 
   aboutToDisappear(): void {
     if (this.timerId >= 0) {
@@ -46,6 +47,10 @@ export struct JsSandboxView {
     if (!this.ready || this.command.length === 0) {
       return
     }
+    if (this.isRunning) {
+      this.command = ''
+      return
+    }
     let currentCommand = this.command
     this.command = ''
     if (currentCommand === 'load') {
@@ -62,19 +67,25 @@ export struct JsSandboxView {
       return
     }
     this.state = 'loading'
+    this.isRunning = true
     try {
       this.result = ''
       await this.run('window.CobranderSandbox.resetBundle()')
       this.state = 'injecting'
       await this.appendScriptChunks()
       this.state = 'evaluating'
+      let runtimeOutput = await this.run('window.CobranderSandbox.runtimeProbe()')
       let loadOutput = await this.run('window.CobranderSandbox.evaluateBundle()')
       let probeOutput = await this.run('window.CobranderSandbox.serverProbe()')
-      this.result = 'load=' + loadOutput + '\nprobe=' + probeOutput
+      let innerOutput = await this.run('window.CobranderSandbox.evaluateInnerBundle()')
+      this.result = 'runtime=' + runtimeOutput + '\nload=' + loadOutput + '\nprobe=' + probeOutput +
+        '\ninner=' + innerOutput
       this.state = 'probed'
     } catch (err) {
       this.result = this.errorText(err)
       this.state = 'error'
+    } finally {
+      this.isRunning = false
     }
   }
 
@@ -95,6 +106,7 @@ export struct JsSandboxView {
 
   private async runProbe(): Promise<void> {
     this.state = 'probing'
+    this.isRunning = true
     try {
       let output = await this.run('window.CobranderSandbox.serverProbe()')
       this.result = output
@@ -102,6 +114,8 @@ export struct JsSandboxView {
     } catch (err) {
       this.result = this.errorText(err)
       this.state = 'error'
+    } finally {
+      this.isRunning = false
     }
   }
 
