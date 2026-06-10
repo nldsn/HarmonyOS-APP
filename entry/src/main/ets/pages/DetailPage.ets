@@ -167,9 +167,12 @@ struct DetailPage {
               Column().height(48)
             }
             .width('100%')
+            .constraintSize({ minHeight: '100%' })
+            .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
           }
           .scrollBar(BarState.Auto)
           .height('100%')
+          .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
         }
         .mode(NavigationMode.Stack)
         .titleBar({
@@ -181,7 +184,7 @@ struct DetailPage {
           },
           style: {
             scrollEffectOpts: {
-              enableScrollEffect: false,
+              enableScrollEffect: true,
               scrollEffectType: ScrollEffectType.GRADIENT_BLUR,
             },
             systemMaterialEffect: {
@@ -201,6 +204,7 @@ struct DetailPage {
     .width('100%')
     .height('100%')
     .backgroundColor('#5A524A')
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 
   @Builder
@@ -212,6 +216,7 @@ struct DetailPage {
         .objectFit(ImageFit.Cover)
         .syncLoad(false)
         .backgroundColor('#241F1A')
+        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
 
       Column()
         .width('100%')
@@ -236,6 +241,7 @@ struct DetailPage {
     }
     .width('100%')
     .height(600)
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
   }
 
   @Builder
