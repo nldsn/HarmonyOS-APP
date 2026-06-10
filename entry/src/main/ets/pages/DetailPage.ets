@@ -1,86 +1,127 @@
 import { router } from '@kit.ArkUI'
+import { common } from '@kit.AbilityKit'
+import { PanCookieProfile, PanPlayRequest, PanPlayResult } from '../common/model/PanModels'
+import {
+  ResolverDefaults,
+  ResolverEpisode,
+  ResolverPlaySource,
+  ResolverVodDetail
+} from '../common/model/ResolverModels'
+import { HttpClient } from '../data/http/HttpClient'
+import { QuarkPanRepository } from '../data/repository/QuarkPanRepository'
+import { ResolverRepository } from '../data/repository/ResolverRepository'
+import { CacheStore } from '../data/storage/CacheStore'
+import { PanCookieStore } from '../data/storage/PanCookieStore'
 
 /**
- * 详情页 — 影视详情 UI 样式模板（数据为硬编码示例）
+ * 详情页 — 沉浸海报式影视详情
  *
- * 品牌色：爱马仕橙 #F37021
+ * 主视觉参考竖屏影视详情页，保留爱马仕橙与原有小 tag 样式。
  */
 
-// ── 本地数据类型 ──────────────────────────────────
-interface PlaySrc { name: string; eps: PlayEp[] }
-interface PlayEp { title: string; url: string; size?: number }
-interface MenuItem { value: string; action: () => void }
+interface PlaySrc {
+  name: string
+  flag: string
+  eps: PlayEp[]
+}
 
-// ── 硬编码示例数据 ─────────────────────────────────
-const DEMO_VOD_NAME: string = '星际穿越 Interstellar'
-const DEMO_VOD_PIC: string = 'https://via.placeholder.com/300x420/1a1a2e/F37021?text=Interstellar'
-const DEMO_TYPE_NAME: string = '科幻'
-const DEMO_YEAR: string = '2014'
-const DEMO_AREA: string = '美国'
-const DEMO_REMARKS: string = '9.4分'
-const DEMO_DIRECTOR: string = '克里斯托弗·诺兰'
-const DEMO_ACTOR: string = '马修·麦康纳 / 安妮·海瑟薇 / 杰西卡·查斯坦'
-const DEMO_CONTENT: string = '近未来的地球黄沙遍野，前NASA宇航员库珀在女儿墨菲的书房发现了奇怪的重力场现象，随即得知某个未知区域内前NASA成员仍在秘密进行拯救人类的计划。在布兰德教授的劝说下，库珀忍痛离开女儿，与艾米莉亚·布兰德等人一同搭乘宇宙飞船前往已知的三个最有可能适合人类居住的星球，穿越遥远的星系银河，感受一小时七年光阴的沧海桑田，窥见了未知星球和黑洞的壮伟与神秘。'
+interface PlayEp {
+  title: string
+  url: string
+  flag: string
+  size: number
+  pic: string
+  fileName: string
+  fileExt: string
+  panType: string
+  shareId: string
+  fileId: string
+  fileToken: string
+  stoken: string
+}
 
-const DEMO_SOURCES: PlaySrc[] = [
-  {
-    name: '蓝光1080P',
-    eps: [
-      { title: '星际穿越.BluRay.1080p.x264.DTS-HD.MA.5.1.mkv', url: '', size: 21474836480 },
-      { title: '星际穿越.BluRay.1080p.x264.DTS-HD.MA.5.1.part2.mkv', url: '', size: 10737418240 },
-      { title: '星际穿越.BluRay.1080p.x264.DTS-HD.MA.5.1.part3.mkv', url: '', size: 5368709120 },
-    ]
-  },
-  {
-    name: '4K超清',
-    eps: [
-      { title: '星际穿越.2014.IMAX.2160p.BluRay.HEVC.DTS-HD.MA.5.1.mkv', url: '', size: 42949672960 },
-    ]
-  },
-  {
-    name: '夸克云盘',
-    eps: [
-      { title: '星际穿越.1080p.特效中英字幕.mp4', url: '', size: 3221225472 },
-    ]
-  },
-]
+interface MenuItem {
+  value: string
+  action: () => void
+}
+
+interface DetailRouteParams {
+  vod_id?: string
+  vod_name?: string
+  vod_pic?: string
+  resolver_base_url?: string
+  resolver_source_id?: string
+  site_key?: string
+  site_name?: string
+}
+
+const EMPTY_VOD_NAME: string = '影视详情'
+const EMPTY_VOD_PIC: string = 'https://via.placeholder.com/300x420/333333/F37021?text=Poster'
 
 @Entry
 @Component
 struct DetailPage {
-  @State vodId: string = 'demo1'
-  @State vodName: string = DEMO_VOD_NAME
-  @State vodPic: string = DEMO_VOD_PIC
-  @State typeName: string = DEMO_TYPE_NAME
-  @State vodYear: string = DEMO_YEAR
-  @State vodArea: string = DEMO_AREA
-  @State vodRemarks: string = DEMO_REMARKS
-  @State vodDirector: string = DEMO_DIRECTOR
-  @State vodActor: string = DEMO_ACTOR
-  @State vodContent: string = DEMO_CONTENT
-  @State sources: PlaySrc[] = DEMO_SOURCES
+  @State vodId: string = ''
+  @State vodName: string = EMPTY_VOD_NAME
+  @State vodPic: string = EMPTY_VOD_PIC
+  @State typeName: string = ''
+  @State vodYear: string = ''
+  @State vodArea: string = ''
+  @State vodRemarks: string = ''
+  @State vodDirector: string = ''
+  @State vodActor: string = ''
+  @State vodContent: string = ''
+  @State sources: PlaySrc[] = []
   @State isLoading: boolean = false
+  @State isResolvingPlay: boolean = false
   @State errorMsg: string = ''
+  @State playMessage: string = ''
   @State showFullIntro: boolean = false
   @State activeSourceIndex: number = 0
+  @State activeEpisodeIndex: number = 0
+  @State resolverBaseUrl: string = ResolverDefaults.BASE_URL
+  @State resolverSourceId: string = ''
+  @State siteKey: string = ''
+  @State siteName: string = ''
+
+  private resolverRepository: ResolverRepository = new ResolverRepository(new HttpClient())
+  private quarkPanRepository: QuarkPanRepository = new QuarkPanRepository()
 
   aboutToAppear(): void {
-    let p: Record<string, Object> = router.getParams() as Record<string, Object>
-    if (p !== null && p !== undefined) {
-      let name: string = (p['vod_name'] as string) ?? ''
+    let params = router.getParams()
+    if (params !== null && params !== undefined) {
+      let p: DetailRouteParams = params as DetailRouteParams
+      let id: string = p.vod_id ?? ''
+      if (id.length > 0) {
+        this.vodId = id
+      }
+      let name: string = p.vod_name ?? ''
       if (name.length > 0) {
         this.vodName = name
       }
-      let pic: string = (p['vod_pic'] as string) ?? ''
+      let pic: string = p.vod_pic ?? ''
       if (pic.length > 0) {
-        this.vodPic = pic
+        this.vodPic = this.posterUrl(pic)
+      }
+      let baseUrl: string = p.resolver_base_url ?? ''
+      if (baseUrl.length > 0) {
+        this.resolverBaseUrl = baseUrl
+      }
+      let sourceId: string = p.resolver_source_id ?? ''
+      if (sourceId.length > 0) {
+        this.resolverSourceId = sourceId
+      }
+      let key: string = p.site_key ?? ''
+      if (key.length > 0) {
+        this.siteKey = key
+      }
+      let siteDisplayName: string = p.site_name ?? ''
+      if (siteDisplayName.length > 0) {
+        this.siteName = siteDisplayName
       }
     }
+    this.loadDetail()
   }
-
-  // ════════════════════════════════════════════
-  // BUILD
-  // ════════════════════════════════════════════
 
   build() {
     Column() {
@@ -92,271 +133,788 @@ struct DetailPage {
         Stack({ alignContent: Alignment.TopStart }) {
           Scroll() {
             Column() {
-              this.buildHero()
-              this.buildSynopsis()
+              this.buildPosterHero()
+              this.buildIntroBlock()
               this.buildSourceSection()
-              Column().height(40)
-            }.width('100%')
+              this.buildPlayStatus()
+              Column().height(48)
+            }
+            .width('100%')
           }
-          .scrollBar(BarState.Auto).layoutWeight(1)
+          .scrollBar(BarState.Auto)
+          .layoutWeight(1)
+
           this.buildTopBar()
-        }.width('100%').layoutWeight(1)
-      }
-    }
-    .width('100%').height('100%')
-    .backgroundColor($r('app.color.background'))
-  }
-
-  // ════════════════════════════════════════════
-  // 超大英雄海报 — Emby 风格
-  // ════════════════════════════════════════════
-
-  @Builder
-  buildHero() {
-    Column() {
-      Stack({ alignContent: Alignment.BottomStart }) {
-        Image(this.vodPic)
-          .width('100%').height(300)
-          .objectFit(ImageFit.Cover).blur(24).brightness(0.35)
-
-        Column()
-          .width('100%').height(300)
-          .linearGradient({
-            direction: GradientDirection.Bottom,
-            colors: [
-              [Color.Transparent, 0.0],
-              ['#CC000000', 0.6],
-              ['#E6000000', 0.85],
-              [$r('app.color.background'), 1.0]
-            ]
-          })
-
-        Row({ space: 16 }) {
-          Image(this.vodPic)
-            .width(155).aspectRatio(0.7)
-            .objectFit(ImageFit.Cover).borderRadius(12)
-            .shadow({ radius: 24, color: '#60000000', offsetY: 8 })
-
-          Column({ space: 8 }) {
-            Text(this.vodName)
-              .fontSize(22).fontWeight(FontWeight.Bold)
-              .fontColor(Color.White).maxLines(2)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-            if (this.hasTags()) {
-              Flex({ wrap: FlexWrap.Wrap }) {
-                if (this.typeName.length > 0) { this.buildTag(this.typeName) }
-                if (this.vodYear.length > 0) { this.buildTag(this.vodYear) }
-                if (this.vodArea.length > 0) { this.buildTag(this.vodArea) }
-                if (this.vodRemarks.length > 0) { this.buildTag(this.vodRemarks) }
-              }
-            }
-
-            if (this.vodDirector.length > 0) {
-              Text('导演: ' + this.vodDirector).fontSize(13)
-                .fontColor('#CCCCCC').maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-            }
-
-            if (this.vodActor.length > 0) {
-              Text('主演: ' + this.vodActor).fontSize(12)
-                .fontColor('#AAAAAA').maxLines(2).lineHeight(18)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-            }
-          }
-          .layoutWeight(1).alignItems(HorizontalAlign.Start)
         }
-        .width('100%').padding({ left: 20, right: 20, bottom: 20 })
+        .width('100%')
+        .layoutWeight(1)
       }
-      .width('100%').height(300)
     }
-    .width('100%').backgroundColor($r('app.color.background'))
+    .width('100%')
+    .height('100%')
+    .backgroundColor('#201D19')
   }
 
   @Builder
-  buildTag(text: string) {
-    Text(text)
-      .fontSize(11).fontColor('#FFE0C0')
-      .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-      .margin({ right: 6, bottom: 6 })
-      .borderRadius(4).backgroundColor('#33FFFFFF')
-      .border({ width: 1, color: '#44FFFFFF' })
+  buildPosterHero() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Image(this.vodPic)
+        .width('100%')
+        .height(600)
+        .objectFit(ImageFit.Cover)
+        .syncLoad(false)
+        .backgroundColor('#241F1A')
+        .opacity(0.32)
+
+      Column()
+        .width('100%')
+        .height(600)
+        .backgroundColor('#66201D19')
+
+      Column()
+        .width('100%')
+        .height(600)
+        .linearGradient({
+          direction: GradientDirection.Bottom,
+          colors: [
+            ['#00000000', 0.0],
+            ['#33201D19', 0.35],
+            ['#CC201D19', 0.76],
+            ['#FF201D19', 1.0]
+          ]
+        })
+
+      Column({ space: 13 }) {
+        Image(this.vodPic)
+          .width(152)
+          .height(218)
+          .objectFit(ImageFit.Cover)
+          .syncLoad(false)
+          .borderRadius(18)
+          .backgroundColor('#2B2722')
+          .shadow({ radius: 24, color: '#7A000000', offsetY: 10 })
+
+        this.buildTitleLockup()
+        this.buildContinueButton()
+        this.buildActionRow()
+      }
+      .width('100%')
+      .padding({ left: 24, right: 24, bottom: 22 })
+      .alignItems(HorizontalAlign.Center)
+    }
+    .width('100%')
+    .height(600)
   }
 
-  // ════════════════════════════════════════════
-  // 悬浮顶栏
-  // ════════════════════════════════════════════
+  @Builder
+  buildTitleLockup() {
+    Column({ space: 12 }) {
+      Text(this.vodName)
+        .fontSize(this.heroTitleSize())
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+        .textAlign(TextAlign.Center)
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+
+      Text(this.metaLine())
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#F4EFE8')
+        .textAlign(TextAlign.Center)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+
+      Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center }) {
+        if (this.typeName.length > 0) {
+          this.buildTag(this.typeName)
+        }
+        if (this.vodYear.length > 0) {
+          this.buildTag(this.vodYear)
+        }
+        if (this.vodArea.length > 0) {
+          this.buildTag(this.vodArea)
+        }
+        if (this.vodRemarks.length > 0) {
+          this.buildTag(this.vodRemarks)
+        }
+      }
+      .width('100%')
+    }
+    .width('100%')
+  }
+
+  @Builder
+  buildContinueButton() {
+    Column({ space: 3 }) {
+      Row({ space: 6 }) {
+        SymbolGlyph($r('sys.symbol.play_fill'))
+          .fontSize(20)
+          .fontColor([Color.Black])
+        Text('继续播放')
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.Black)
+      }
+      .justifyContent(FlexAlign.Center)
+      .width('100%')
+
+      Text(this.continueSubTitle())
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#5D5A56')
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+        .textAlign(TextAlign.Center)
+    }
+    .width('86%')
+    .height(58)
+    .alignSelf(ItemAlign.Center)
+    .justifyContent(FlexAlign.Center)
+    .borderRadius(14)
+    .backgroundColor('#F8F6F2')
+    .shadow({ radius: 12, color: '#42000000', offsetY: 5 })
+    .enabled(!this.isResolvingPlay)
+    .onClick(async () => {
+      await this.resolveActiveEpisode()
+    })
+  }
+
+  @Builder
+  buildActionRow() {
+    Row({ space: 24 }) {
+      this.buildActionIcon($r('sys.symbol.magnifyingglass'))
+      this.buildActionIcon($r('sys.symbol.heart_fill'))
+      this.buildActionIcon($r('sys.symbol.ellipsis_circle'))
+    }
+    .width('100%')
+    .height(44)
+    .justifyContent(FlexAlign.Center)
+    .alignSelf(ItemAlign.Center)
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  buildActionIcon(icon: Resource) {
+    Button() {
+      SymbolGlyph(icon)
+        .fontSize(20)
+        .fontColor([Color.White])
+    }
+    .width(40)
+    .height(40)
+    .borderRadius(20)
+    .backgroundColor('#18FFFFFF')
+  }
 
   @Builder
   buildTopBar() {
-    Row({ space: 12 }) {
+    Row() {
       Button() {
-        SymbolGlyph($r('sys.symbol.chevron_left')).fontSize(22).fontColor([Color.White])
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(21)
+          .fontColor(['#201D19'])
       }
-      .width(36).height(36).backgroundColor('#33FFFFFF').borderRadius(18)
-      .onClick(() => { router.back() })
+      .width(38)
+      .height(38)
+      .borderRadius(19)
+      .backgroundColor('#F7F1E9')
+      .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THICK)
+      .border({ width: 1, color: '#CCFFFFFF' })
+      .shadow({ radius: 18, color: '#66000000', offsetY: 6 })
+      .hoverEffect(HoverEffect.Highlight)
+      .onClick(() => {
+        router.back()
+      })
 
-      Text(this.vodName).fontSize(16).fontWeight(FontWeight.Medium)
-        .fontColor(Color.White).maxLines(1).layoutWeight(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Blank()
     }
-    .width('100%').padding({ left: 16, top: 48, right: 16, bottom: 10 })
+    .width('100%')
+    .padding({ left: 18, top: 48, right: 18 })
   }
-
-  // ════════════════════════════════════════════
-  // 简介
-  // ════════════════════════════════════════════
 
   @Builder
-  buildSynopsis() {
-    if (this.vodContent.length > 0) {
-      Column({ space: 6 }) {
-        Row() {
-          Text('简介').fontSize(16).fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
-          Blank()
-          Text(this.showFullIntro ? '收起' : '展开')
-            .fontSize(12).fontColor($r('app.color.hermes_orange'))
-        }.width('100%').onClick(() => { this.showFullIntro = !this.showFullIntro })
+  buildIntroBlock() {
+    Column({ space: 10 }) {
+      Text(this.vodContent)
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#F2ECE4')
+        .lineHeight(24)
+        .maxLines(this.showFullIntro ? 12 : 3)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
 
-        Text(this.vodContent).fontSize(13)
-          .fontColor($r('app.color.text_secondary')).lineHeight(20)
-          .maxLines(this.showFullIntro ? 99 : 3)
+      if (this.vodDirector.length > 0 || this.vodActor.length > 0) {
+        Text(this.creditLine())
+          .fontSize(12)
+          .fontColor('#BEB6AA')
+          .lineHeight(18)
+          .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
       }
-      .width('100%').padding({ left: 20, right: 20, top: 16, bottom: 8 })
-      .alignItems(HorizontalAlign.Start)
     }
+    .width('100%')
+    .padding({ left: 22, right: 22, top: 4, bottom: 24 })
+    .backgroundColor('#201D19')
+    .onClick(() => {
+      this.showFullIntro = !this.showFullIntro
+    })
   }
-
-  // ════════════════════════════════════════════
-  // 剧集区
-  // ════════════════════════════════════════════
 
   @Builder
   buildSourceSection() {
     if (this.sources.length > 0) {
-      Column({ space: 8 }) {
+      Column({ space: 14 }) {
         Row() {
-          Text('剧集').fontSize(16).fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
+          Button() {
+            Row({ space: 8 }) {
+              Text(this.currentSourceName())
+                .fontSize(20)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(Color.White)
+                .maxLines(1)
+              SymbolGlyph($r('sys.symbol.chevron_down'))
+                .fontSize(16)
+                .fontColor(['#BEB6AA'])
+            }
+          }
+          .height(34)
+          .padding({ left: 0, right: 8 })
+          .backgroundColor(Color.Transparent)
+          .bindMenu(this.sourceMenuItems())
 
           Blank()
 
-          if (this.sources.length > 1) {
-            Button() {
-              Row({ space: 4 }) {
-                Text(this.sources[this.activeSourceIndex].name)
-                  .fontSize(12).fontColor($r('app.color.hermes_orange'))
-                  .maxLines(1)
-                SymbolGlyph($r('sys.symbol.chevron_down'))
-                  .fontSize(12).fontColor([$r('app.color.hermes_orange')])
-              }
-            }
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor($r('app.color.tag_background'))
-            .borderRadius(6)
-            .bindMenu(this.sourceMenuItems())
-          } else {
-            Text(this.sources[0].name)
-              .fontSize(12).fontColor($r('app.color.text_secondary'))
-              .maxLines(1)
-          }
+          this.buildSourceTool($r('sys.symbol.magnifyingglass'), true)
+          this.buildSourceTool($r('sys.symbol.backward_fill'), false)
+          this.buildSourceTool($r('sys.symbol.forward_end_fill'), false)
+
+          Text('更多')
+            .fontSize(14)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#BEB6AA')
+            .margin({ left: 4 })
         }
-        .width('100%').padding({ left: 20, right: 20, top: 12 })
+        .width('100%')
+        .padding({ left: 22, right: 22 })
 
         this.buildEpisodeRow()
-      }.width('100%')
+      }
+      .width('100%')
+      .padding({ bottom: 8 })
+      .backgroundColor('#201D19')
     }
+  }
+
+  @Builder
+  buildSourceTool(icon: Resource, active: boolean) {
+    Button() {
+      if (active) {
+        SymbolGlyph(icon)
+          .fontSize(18)
+          .fontColor([Color.White])
+      } else {
+        SymbolGlyph(icon)
+          .fontSize(18)
+          .fontColor(['#928C84'])
+      }
+    }
+    .width(34)
+    .height(34)
+    .borderRadius(17)
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
   buildEpisodeRow() {
     if (this.activeSourceIndex < this.sources.length) {
-      List({ space: 10 }) {
+      List({ space: 14 }) {
         ForEach(this.activeSourceEps(), (ep: PlayEp, epIdx: number) => {
-          ListItem() { this.buildEpisodeCard(ep, epIdx) }
+          this.buildEpisodeListItem(ep, epIdx)
         })
       }
       .listDirection(Axis.Horizontal)
-      .scrollBar(BarState.Auto)
+      .scrollBar(BarState.Off)
       .width('100%')
-      .padding({ left: 20, right: 20, top: 4, bottom: 12 })
+      .height(170)
+      .padding({ left: 22, right: 22 })
+    }
+  }
+
+  @Builder
+  buildEpisodeListItem(ep: PlayEp, epIdx: number) {
+    ListItem() {
+      this.buildEpisodeCard(ep, epIdx)
     }
   }
 
   @Builder
   buildEpisodeCard(ep: PlayEp, epIdx: number) {
-    Column({ space: 4 }) {
-      Stack({ alignContent: Alignment.Center }) {
-        Column()
-          .width(140).aspectRatio(1.6).borderRadius(10)
-          .backgroundColor($r('app.color.episode_card'))
+    Column({ space: 8 }) {
+      Stack({ alignContent: Alignment.BottomStart }) {
+        this.buildEpisodeThumb(ep)
 
-        Text(this.formatEpNum(epIdx))
-          .fontSize(36).fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.hermes_orange')).opacity(0.22)
+        Column()
+          .width(188)
+          .height(106)
+          .borderRadius(18)
+          .backgroundColor(this.episodeOverlayColor(epIdx))
+
+        if (this.isActiveEpisode(epIdx)) {
+          Column()
+            .width(188)
+            .height(106)
+            .borderRadius(18)
+            .border({ width: 3, color: '#F8F6F2' })
+        }
+
+        Text(this.episodeBadgeText(epIdx))
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+          .borderRadius(8)
+          .backgroundColor('#A6F37021')
+          .margin({ left: 10, bottom: 10 })
       }
-      .width(140)
+      .width(188)
+      .height(106)
 
       Text(ep.title)
-        .fontSize(11).fontColor($r('app.color.text_primary'))
-        .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-        .lineHeight(15).width(140)
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width(188)
 
-      if (this.epHasSize(ep)) {
-        Text(this.epSizeText(ep))
-          .fontSize(10).fontColor($r('app.color.text_secondary'))
-          .maxLines(1).width(140)
-      }
+      Text(this.epSizeText(ep))
+        .fontSize(12)
+        .fontColor('#BEB6AA')
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width(188)
     }
-    .width(140)
+    .width(188)
+    .onClick(async () => {
+      this.activeEpisodeIndex = epIdx
+      await this.resolveEpisode(ep)
+    })
   }
 
-  // ════════════════════════════════════════════
-  // 骨架屏
-  // ════════════════════════════════════════════
+  @Builder
+  buildEpisodeThumb(ep: PlayEp) {
+    if (ep.pic.length > 0) {
+      Image(ep.pic)
+        .width(188)
+        .height(106)
+        .objectFit(ImageFit.Cover)
+        .syncLoad(false)
+        .borderRadius(18)
+        .backgroundColor('#2B2722')
+    } else {
+      Column({ space: 7 }) {
+        Row() {
+          Text(this.panBadgeText(ep))
+            .fontSize(11)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#FFE0C0')
+            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+            .borderRadius(6)
+            .backgroundColor('#33F37021')
+            .border({ width: 1, color: '#55F37021' })
+          Blank()
+          Text(this.fileExtText(ep))
+            .fontSize(11)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#F8F6F2')
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        Text(this.fileCardTitle(ep))
+          .fontSize(13)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .maxLines(2)
+          .lineHeight(17)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+
+        Text(this.fileCardSubTitle(ep))
+          .fontSize(10)
+          .fontColor('#BEB6AA')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+      }
+      .width(188)
+      .height(106)
+      .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+      .borderRadius(18)
+      .backgroundColor('#302922')
+      .linearGradient({
+        direction: GradientDirection.Bottom,
+        colors: [
+          ['#3B3028', 0.0],
+          ['#211D19', 0.68],
+          ['#452514', 1.0]
+        ]
+      })
+      .border({ width: 1, color: '#33F37021' })
+    }
+  }
+
+  @Builder
+  buildPlayStatus() {
+    if (this.playMessage.length > 0 || this.isResolvingPlay) {
+      Row({ space: 8 }) {
+        if (this.isResolvingPlay) {
+          LoadingProgress()
+            .width(18)
+            .height(18)
+            .color($r('app.color.hermes_orange'))
+        }
+        Text(this.playMessage)
+          .fontSize(12)
+          .fontColor('#D8CEC2')
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+      }
+      .width('100%')
+      .padding({ left: 22, right: 22, top: 8, bottom: 4 })
+      .backgroundColor('#201D19')
+    }
+  }
+
+  @Builder
+  buildTag(text: string) {
+    Text(text)
+      .fontSize(11)
+      .fontColor('#FFE0C0')
+      .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+      .margin({ right: 6, bottom: 6 })
+      .borderRadius(4)
+      .backgroundColor('#33FFFFFF')
+      .border({ width: 1, color: '#44FFFFFF' })
+  }
 
   @Builder
   buildSkeleton() {
     Column() {
-      Row().width('100%').height(200).backgroundColor($r('app.color.episode_card'))
+      Row()
+        .width('100%')
+        .height(360)
+        .backgroundColor('#2B2722')
       Column({ space: 8 }) {
-        Row().width('15%').height(16).borderRadius(4).backgroundColor($r('app.color.tag_background'))
-        Row().width('100%').height(12).borderRadius(4).backgroundColor($r('app.color.tag_background'))
-        Row().width('80%').height(12).borderRadius(4).backgroundColor($r('app.color.tag_background'))
-      }.width('100%').padding(20).alignItems(HorizontalAlign.Start)
-    }.width('100%')
+        Row()
+          .width('45%')
+          .height(18)
+          .borderRadius(4)
+          .backgroundColor('#3B352E')
+        Row()
+          .width('100%')
+          .height(12)
+          .borderRadius(4)
+          .backgroundColor('#3B352E')
+        Row()
+          .width('76%')
+          .height(12)
+          .borderRadius(4)
+          .backgroundColor('#3B352E')
+      }
+      .width('100%')
+      .padding(22)
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .backgroundColor('#201D19')
   }
 
   @Builder
   buildError() {
     Column({ space: 16 }) {
       Blank()
-      Text('!').fontSize(36).fontWeight(FontWeight.Bold).fontColor($r('app.color.hermes_orange'))
-        .width(48).height(48).textAlign(TextAlign.Center)
-        .borderRadius(24).border({ width: 2, color: $r('app.color.hermes_orange') })
-      Text(this.errorMsg).fontSize(15).fontColor($r('app.color.text_secondary'))
-        .textAlign(TextAlign.Center).padding({ left: 40, right: 40 })
-      Button('重试').fontSize(14).fontColor(Color.White)
-        .backgroundColor($r('app.color.hermes_orange')).borderRadius(20)
-        .height(40).padding({ left: 24, right: 24 })
-        .onClick(() => { this.isLoading = false; this.errorMsg = '' })
+      Text('!')
+        .fontSize(36)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.hermes_orange'))
+        .width(48)
+        .height(48)
+        .textAlign(TextAlign.Center)
+        .borderRadius(24)
+        .border({ width: 2, color: $r('app.color.hermes_orange') })
+      Text(this.errorMsg)
+        .fontSize(15)
+        .fontColor('#BEB6AA')
+        .textAlign(TextAlign.Center)
+        .padding({ left: 40, right: 40 })
+      Button('重试')
+        .fontSize(14)
+        .fontColor(Color.White)
+        .backgroundColor($r('app.color.hermes_orange'))
+        .borderRadius(20)
+        .height(40)
+        .padding({ left: 24, right: 24 })
+        .onClick(async () => {
+          await this.loadDetail()
+        })
       Blank()
-    }.width('100%').layoutWeight(1)
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .backgroundColor('#201D19')
   }
-
-  // ════════════════════════════════════════════
-  // HELPERS（纯展示逻辑）
-  // ════════════════════════════════════════════
 
   private sourceMenuItems(): MenuItem[] {
     let items: MenuItem[] = []
     for (let i = 0; i < this.sources.length; i++) {
+      let index: number = i
       let src: PlaySrc = this.sources[i]
-      items.push({ value: src.name, action: () => { this.activeSourceIndex = i } })
+      items.push({
+        value: src.name,
+        action: () => {
+          this.activeSourceIndex = index
+          this.activeEpisodeIndex = 0
+          this.playMessage = ''
+        }
+      })
     }
     return items
+  }
+
+  private async loadDetail(): Promise<void> {
+    if (this.vodId.length === 0) {
+      this.errorMsg = '缺少影片 ID'
+      return
+    }
+    if (this.resolverBaseUrl.trim().length === 0 || this.resolverSourceId.length === 0 ||
+      this.siteKey.length === 0) {
+      this.errorMsg = '缺少远端解析上下文'
+      return
+    }
+
+    let currentVodId: string = this.vodId
+    this.isLoading = true
+    this.isResolvingPlay = false
+    this.errorMsg = ''
+    this.playMessage = ''
+
+    try {
+      let detail: ResolverVodDetail = await this.resolverRepository.getDetail(
+        this.resolverBaseUrl,
+        this.resolverSourceId,
+        this.siteKey,
+        currentVodId
+      )
+      if (currentVodId !== this.vodId) {
+        return
+      }
+      this.applyDetail(detail)
+    } catch (err) {
+      this.errorMsg = this.errorText(err)
+    } finally {
+      this.isLoading = false
+    }
+  }
+
+  private applyDetail(detail: ResolverVodDetail): void {
+    if (detail.vodId.length > 0) {
+      this.vodId = detail.vodId
+    }
+    if (detail.vodName.length > 0) {
+      this.vodName = detail.vodName
+    }
+    if (detail.vodPic.length > 0) {
+      this.vodPic = this.posterUrl(detail.vodPic)
+    }
+    this.typeName = detail.typeName
+    this.vodYear = detail.vodYear
+    this.vodArea = detail.vodArea
+    this.vodRemarks = detail.vodRemarks
+    this.vodDirector = detail.vodDirector
+    this.vodActor = detail.vodActor
+    this.vodContent = this.nonEmptyText(detail.vodContent, '暂无简介')
+    this.sources = this.mapPlaySources(detail.playSources)
+    this.activeSourceIndex = 0
+    this.activeEpisodeIndex = 0
+    if (this.sources.length === 0) {
+      this.playMessage = '当前详情未返回可播放剧集'
+    }
+  }
+
+  private mapPlaySources(items: ResolverPlaySource[]): PlaySrc[] {
+    let result: PlaySrc[] = []
+    for (let i = 0; i < items.length; i++) {
+      let item: ResolverPlaySource = items[i]
+      let episodes: PlayEp[] = this.mapEpisodes(item.episodes, item.flag)
+      if (episodes.length > 0) {
+        result.push({
+          name: this.nonEmptyText(item.name, '线路' + (i + 1).toString()),
+          flag: this.nonEmptyText(item.flag, item.name),
+          eps: episodes
+        })
+      }
+    }
+    return result
+  }
+
+  private mapEpisodes(items: ResolverEpisode[], fallbackFlag: string): PlayEp[] {
+    let result: PlayEp[] = []
+    for (let i = 0; i < items.length; i++) {
+      let item: ResolverEpisode = items[i]
+      if (item.url.length > 0) {
+        result.push({
+          title: this.nonEmptyText(item.title, '第' + (i + 1).toString() + '集'),
+          url: item.url,
+          flag: this.nonEmptyText(item.flag, fallbackFlag),
+          size: item.size,
+          pic: this.optionalPosterUrl(item.pic ?? ''),
+          fileName: this.nonEmptyText(item.fileName ?? '', item.title),
+          fileExt: item.fileExt ?? '',
+          panType: item.panType ?? '',
+          shareId: item.shareId ?? '',
+          fileId: item.fileId ?? '',
+          fileToken: item.fileToken ?? '',
+          stoken: item.stoken ?? ''
+        })
+      }
+    }
+    return result
+  }
+
+  private async resolveActiveEpisode(): Promise<void> {
+    let ep: PlayEp | null = this.activeEpisode()
+    if (ep === null) {
+      this.playMessage = '请先选择剧集'
+      return
+    }
+    await this.resolveEpisode(ep)
+  }
+
+  private async resolveEpisode(ep: PlayEp): Promise<void> {
+    if (this.isResolvingPlay) {
+      return
+    }
+
+    this.isResolvingPlay = true
+    this.errorMsg = ''
+    this.playMessage = '正在解析：' + ep.title
+    try {
+      if (this.isDirectMediaUrl(ep.url)) {
+        this.playMessage = '直链资源，正在进入播放页'
+        this.openPlayer(ep.url, ep.title, ep.pic, 'direct', '直链播放', '')
+      } else if (this.isQuarkEpisode(ep)) {
+        let localResolved: boolean = await this.resolveByLocalPan(ep)
+        if (!localResolved) {
+          this.playMessage = this.nonEmptyText(this.playMessage, '本地夸克解析失败，请检查账号或剧集数据')
+        }
+      } else {
+        this.playMessage = '当前剧集不是直链或夸克网盘资源，暂未接入 App 本地播放'
+      }
+    } catch (err) {
+      this.playMessage = this.errorText(err)
+    } finally {
+      this.isResolvingPlay = false
+    }
+  }
+
+  private async resolveByLocalPan(ep: PlayEp): Promise<boolean> {
+    if (!this.isQuarkEpisode(ep)) {
+      return false
+    }
+    let cookie: string = await this.localQuarkCookie()
+    if (cookie.length === 0) {
+      this.playMessage = '未同步夸克账号，请先到配置中心扫码登录'
+      return false
+    }
+    this.playMessage = '正在使用本地夸克账号解析：' + ep.title
+    let result: PanPlayResult = await this.quarkPanRepository.resolve(this.panPlayRequest(ep), cookie)
+    if (result.ok && result.url.length > 0) {
+      this.playMessage = '本地夸克解析成功，正在进入播放页'
+      this.openPlayer(result.url, ep.title, this.nonEmptyText(result.cover, ep.pic),
+        result.source, result.message, result.headersJson)
+      return true
+    }
+    this.playMessage = this.nonEmptyText(result.message, '本地夸克解析失败，请检查账号或剧集数据')
+    return false
+  }
+
+  private panPlayRequest(ep: PlayEp): PanPlayRequest {
+    return {
+      panType: ep.panType,
+      shareUrl: ep.url,
+      shareId: ep.shareId,
+      fileId: ep.fileId,
+      fileToken: ep.fileToken,
+      stoken: ep.stoken,
+      fileName: ep.fileName,
+      title: ep.title,
+      cover: this.nonEmptyText(ep.pic, this.vodPic)
+    }
+  }
+
+  private async localQuarkCookie(): Promise<string> {
+    let context = getContext(this) as common.UIAbilityContext
+    let store = new PanCookieStore(new CacheStore(context))
+    let cookie: string = store.getQuarkCookie()
+    if (cookie.length > 0) {
+      return cookie
+    }
+    return await this.syncQuarkCookieFromResolver(store)
+  }
+
+  private async syncQuarkCookieFromResolver(store: PanCookieStore): Promise<string> {
+    if (this.resolverBaseUrl.trim().length === 0) {
+      return ''
+    }
+    try {
+      this.playMessage = '正在同步夸克账号...'
+      let profile: PanCookieProfile = await this.resolverRepository.getProfile(this.resolverBaseUrl)
+      if (profile.hasQuark && profile.quarkCookie.length > 0) {
+        store.saveProfile(profile)
+        return profile.quarkCookie
+      }
+    } catch (err) {
+      this.playMessage = this.errorText(err)
+    }
+    return ''
+  }
+
+  private isQuarkEpisode(ep: PlayEp): boolean {
+    let panType: string = ep.panType.toLowerCase()
+    if (panType.indexOf('quark') >= 0 || panType.indexOf('夸克') >= 0) {
+      return true
+    }
+    let flag: string = ep.flag.toLowerCase()
+    if (flag.indexOf('quark') >= 0 || flag.indexOf('夸克') >= 0) {
+      return true
+    }
+    if (ep.url.indexOf('pan.quark.cn/s/') >= 0 || ep.url.indexOf('drive.uc.cn/s/') >= 0) {
+      return true
+    }
+    return ep.shareId.length > 0 && (ep.stoken.length > 0 || ep.fileToken.length > 0 || ep.fileId.length > 0)
+  }
+
+  private openPlayer(playUrl: string, title: string, cover: string, source: string, message: string,
+    headersJson: string): void {
+    router.pushUrl({
+      url: 'pages/PlayerPage',
+      params: {
+        play_url: playUrl,
+        title: title,
+        cover: this.nonEmptyText(cover, this.vodPic),
+        source: source,
+        message: message,
+        headers_json: headersJson
+      }
+    })
   }
 
   private activeSourceEps(): PlayEp[] {
@@ -366,28 +924,204 @@ struct DetailPage {
     return []
   }
 
-  private hasTags(): boolean {
-    return this.typeName.length > 0 || this.vodYear.length > 0 ||
-      this.vodArea.length > 0 || this.vodRemarks.length > 0
+  private isDirectMediaUrl(url: string): boolean {
+    let lower: string = url.trim().toLowerCase()
+    if (!lower.startsWith('http://') && !lower.startsWith('https://')) {
+      return false
+    }
+    if (lower.indexOf('pan.quark.cn/s/') >= 0 || lower.indexOf('drive.uc.cn/s/') >= 0 ||
+      lower.indexOf('pan.baidu.com/s/') >= 0 || lower.indexOf('aliyundrive.com/s/') >= 0 ||
+      lower.indexOf('alipan.com/s/') >= 0) {
+      return false
+    }
+    return lower.indexOf('.m3u8') >= 0 || lower.indexOf('.mp4') >= 0 ||
+      lower.indexOf('.mkv') >= 0 || lower.indexOf('.ts') >= 0 ||
+      lower.indexOf('.flv') >= 0 || lower.indexOf('.mov') >= 0 ||
+      lower.indexOf('.webm') >= 0
   }
 
-  private formatEpNum(idx: number): string {
-    let num: number = idx + 1
-    return num < 10 ? '0' + num.toString() : num.toString()
+  private currentSourceName(): string {
+    if (this.activeSourceIndex < this.sources.length) {
+      return this.sources[this.activeSourceIndex].name
+    }
+    return '线路'
   }
 
-  private epHasSize(ep: PlayEp): boolean {
-    let s: number | undefined = ep.size
-    return s !== undefined && s !== null && s > 0
+  private heroTitleSize(): number {
+    if (this.vodName.length > 10) {
+      return 34
+    }
+    return 44
+  }
+
+  private metaLine(): string {
+    let result: string = ''
+    if (this.vodYear.length > 0) {
+      result = this.vodYear
+    }
+    if (this.typeName.length > 0) {
+      result = this.appendMeta(result, this.typeName)
+    }
+    if (this.vodArea.length > 0) {
+      result = this.appendMeta(result, this.vodArea)
+    }
+    return result
+  }
+
+  private appendMeta(current: string, value: string): string {
+    if (current.length === 0) {
+      return value
+    }
+    return current + ' · ' + value
+  }
+
+  private creditLine(): string {
+    let result: string = ''
+    if (this.vodDirector.length > 0) {
+      result = '导演：' + this.vodDirector
+    }
+    if (this.vodActor.length > 0) {
+      if (result.length > 0) {
+        result = result + '  '
+      }
+      result = result + '主演：' + this.vodActor
+    }
+    return result
+  }
+
+  private continueSubTitle(): string {
+    let ep: PlayEp | null = this.activeEpisode()
+    if (ep === null) {
+      return '选择剧集开始播放'
+    }
+    let text: string = ep.title
+    let size: string = this.epSizeText(ep)
+    if (size.length > 0) {
+      text = text + '  [' + size + ']'
+    }
+    return text
+  }
+
+  private activeEpisode(): PlayEp | null {
+    let eps: PlayEp[] = this.activeSourceEps()
+    if (this.activeEpisodeIndex >= 0 && this.activeEpisodeIndex < eps.length) {
+      return eps[this.activeEpisodeIndex]
+    }
+    return null
+  }
+
+  private isActiveEpisode(index: number): boolean {
+    return this.activeEpisodeIndex === index
+  }
+
+  private episodeOverlayColor(index: number): string {
+    if (this.isActiveEpisode(index)) {
+      return '#12000000'
+    }
+    return '#66000000'
+  }
+
+  private episodeBadgeText(index: number): string {
+    let num: number = index + 1
+    if (num < 10) {
+      return 'E0' + num.toString()
+    }
+    return 'E' + num.toString()
   }
 
   private epSizeText(ep: PlayEp): string {
     let s: number | undefined = ep.size
-    if (s === undefined || s === null || s <= 0) { return '' }
+    if (s === undefined || s === null || s <= 0) {
+      return ''
+    }
     let units: string[] = ['B', 'KB', 'MB', 'GB', 'TB']
     let idx: number = 0
     let size: number = s
-    while (size >= 1024 && idx < units.length - 1) { size = size / 1024; idx++ }
-    return size.toFixed(2) + ' ' + units[idx]
+    while (size >= 1024 && idx < units.length - 1) {
+      size = size / 1024
+      idx++
+    }
+    return size.toFixed(2) + units[idx]
+  }
+
+  private panBadgeText(ep: PlayEp): string {
+    let text: string = ep.panType.toUpperCase()
+    if (text.length > 0) {
+      return text
+    }
+    if (ep.flag.length > 0) {
+      return ep.flag
+    }
+    return 'PAN'
+  }
+
+  private fileExtText(ep: PlayEp): string {
+    let ext: string = ep.fileExt.toUpperCase()
+    if (ext.length > 0 && ext.length <= 8) {
+      return ext
+    }
+    return 'FILE'
+  }
+
+  private fileCardTitle(ep: PlayEp): string {
+    if (ep.fileName.length > 0) {
+      return ep.fileName
+    }
+    return ep.title
+  }
+
+  private fileCardSubTitle(ep: PlayEp): string {
+    let id: string = ep.fileId
+    if (id.length > 10) {
+      id = id.substring(0, 10)
+    }
+    if (id.length > 0) {
+      return '文件 ID ' + id
+    }
+    if (ep.shareId.length > 0) {
+      return '网盘分享 ' + ep.shareId
+    }
+    return '等待网盘缩略图'
+  }
+
+  private posterUrl(url: string): string {
+    let trimmed: string = url.trim()
+    if (trimmed.length > 0) {
+      return this.upgradeImageUrl(trimmed)
+    }
+    return EMPTY_VOD_PIC
+  }
+
+  private optionalPosterUrl(url: string): string {
+    let trimmed: string = url.trim()
+    if (trimmed.length > 0) {
+      return this.upgradeImageUrl(trimmed)
+    }
+    return ''
+  }
+
+  private upgradeImageUrl(url: string): string {
+    return url.replace('/t/p/w185/', '/t/p/w780/')
+      .replace('/t/p/w220/', '/t/p/w780/')
+      .replace('/t/p/w300/', '/t/p/w780/')
+      .replace('/t/p/w342/', '/t/p/w780/')
+      .replace('/t/p/w500/', '/t/p/w780/')
+      .replace('/view/photo/s_ratio_poster/public/', '/view/photo/l_ratio_poster/public/')
+      .replace('/view/photo/m_ratio_poster/public/', '/view/photo/l_ratio_poster/public/')
+  }
+
+  private nonEmptyText(value: string, fallback: string): string {
+    let trimmed: string = value.trim()
+    if (trimmed.length > 0) {
+      return trimmed
+    }
+    return fallback
+  }
+
+  private errorText(err: Object): string {
+    if (err instanceof Error && err.message.length > 0) {
+      return err.message
+    }
+    return '详情加载失败'
   }
 }

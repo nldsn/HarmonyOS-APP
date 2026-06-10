@@ -1,6 +1,7 @@
 import { HdsTabs, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit'
+import { ResolverDefaults } from '../common/model/ResolverModels'
 import { SiteSimple } from '../common/model/SourceModels'
-import { DEMO_SITES, HomePage } from '../tabs/HomePage'
+import { HomePage } from '../tabs/HomePage'
 import { LivePage } from '../tabs/LivePage'
 import { SettingsPage } from '../tabs/SettingsPage'
 
@@ -167,11 +168,9 @@ struct Index {
   aboutToAppear(): void {
     // 标准 HarmonyOS 状态栏高度 44vp
     AppStorage.setOrCreate<number>('statusBarTop', 44)
-    AppStorage.setOrCreate<string>('jsSandboxScript', '')
-    AppStorage.setOrCreate<string>('jsSandboxCommand', '')
-    AppStorage.setOrCreate<string>('jsSandboxResult', '')
-    AppStorage.setOrCreate<string>('jsSandboxState', 'idle')
-    AppStorage.setOrCreate<SiteSimple[]>('siteList', DEMO_SITES)
+    AppStorage.setOrCreate<SiteSimple[]>('siteList', [])
+    AppStorage.setOrCreate<string>('resolverBaseUrl', ResolverDefaults.BASE_URL)
+    AppStorage.setOrCreate<string>('resolverSourceId', '')
   }
 
   build() {

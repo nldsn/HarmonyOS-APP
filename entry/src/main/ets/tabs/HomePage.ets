@@ -1,5 +1,12 @@
 import { router } from '@kit.ArkUI'
+import {
+  ResolverCategoryItem,
+  ResolverDefaults,
+  ResolverVodItem
+} from '../common/model/ResolverModels'
 import { SiteSimple } from '../common/model/SourceModels'
+import { HttpClient } from '../data/http/HttpClient'
+import { ResolverRepository } from '../data/repository/ResolverRepository'
 
 /**
  * 首页 — 视频网格展示（UI 样式模板，数据为硬编码示例）
@@ -26,66 +33,31 @@ interface SiteMenuItem {
   action: () => void
 }
 
-// ── 硬编码示例站点 ──────────────────────────────────
-export const DEMO_SITES: SiteSimple[] = [
-  { key: 'site1', name: '示例站点A' },
-  { key: 'site2', name: '示例站点B' },
-  { key: 'site3', name: '示例站点C' },
-]
-
-const DEMO_POSTER: string = 'https://via.placeholder.com/300x420/333333/F37021?text=Poster'
-
-// ── 硬编码示例分类 + 视频 ──────────────────────────
-const DEMO_CATEGORIES: CategoryWithVods[] = [
-  {
-    type_id: '1',
-    type_name: '推荐',
-    vods: [
-      { vod_id: '1', vod_name: '示例电影 - 星际穿越', vod_pic: DEMO_POSTER, vod_remarks: '9.4分' },
-      { vod_id: '2', vod_name: '示例电影 - 盗梦空间', vod_pic: DEMO_POSTER, vod_remarks: '9.3分' },
-      { vod_id: '3', vod_name: '示例电影 - 肖申克的救赎', vod_pic: DEMO_POSTER, vod_remarks: '9.7分' },
-      { vod_id: '4', vod_name: '示例电影 - 阿甘正传', vod_pic: DEMO_POSTER, vod_remarks: '9.5分' },
-      { vod_id: '5', vod_name: '示例剧集 - 权力的游戏', vod_pic: DEMO_POSTER, vod_remarks: '全8季' },
-      { vod_id: '6', vod_name: '示例剧集 - 绝命毒师', vod_pic: DEMO_POSTER, vod_remarks: '全5季' },
-    ]
-  },
-  {
-    type_id: '2',
-    type_name: '电影',
-    vods: []
-  },
-  {
-    type_id: '3',
-    type_name: '电视剧',
-    vods: []
-  },
-  {
-    type_id: '4',
-    type_name: '综艺',
-    vods: []
-  },
-  {
-    type_id: '5',
-    type_name: '动漫',
-    vods: []
-  },
-]
+const EMPTY_POSTER: string = 'https://via.placeholder.com/300x420/333333/F37021?text=Poster'
 
 @Component
 export struct HomePage {
-  @StorageLink('siteList') siteList: SiteSimple[] = DEMO_SITES
+  @StorageLink('siteList') siteList: SiteSimple[] = []
+  @StorageLink('resolverBaseUrl') resolverBaseUrl: string = ResolverDefaults.BASE_URL
+  @StorageLink('resolverSourceId') resolverSourceId: string = ''
   @StorageProp('statusBarTop') statusBarTop: number = 44
 
-  @State private selectedSiteName: string = '示例站点A'
-  @State private selectedSiteKey: string = 'site1'
-  @State private categories: CategoryWithVods[] = DEMO_CATEGORIES
+  @State private selectedSiteKey: string = ''
+  @State private categories: CategoryWithVods[] = []
   @State private activeCategoryIndex: number = 0
   @State private isLoading: boolean = false
   @State private isLoadingCategory: boolean = false
   @State private errorMsg: string = ''
   @State private handlerName: string = ''
-  @State private showUrlInput: boolean = false
-  @State private urlInput: string = ''
+  @State private lastLoadedSourceId: string = ''
+  @State private lastLoadedSiteKey: string = ''
+  @State private configCenterPageUrl: string = ''
+
+  private resolverRepository: ResolverRepository = new ResolverRepository(new HttpClient())
+
+  aboutToAppear(): void {
+    this.loadCurrentSiteHomeIfReady()
+  }
 
   build() {
     Column() {
@@ -95,6 +67,8 @@ export struct HomePage {
 
       if (this.isLoading) {
         this.buildLoading()
+      } else if (this.siteList.length === 0) {
+        this.buildEmpty()
       } else if (this.errorMsg.length > 0 && this.categories.length === 0) {
         this.buildError()
       } else if (this.categories.length > 0) {
@@ -113,16 +87,16 @@ export struct HomePage {
   buildTopBar() {
     Row({ space: 10 }) {
       Button() {
-        Text(this.selectedSiteName.length > 0 ? this.selectedSiteName.substring(0, 3) : '选站')
+        Text(this.currentSiteBadgeText())
           .fontSize(14).fontColor(Color.White)
       }
       .width(44).height(44).borderRadius(12)
       .backgroundColor($r('app.color.hermes_orange'))
       .bindMenu(this.menuItems())
 
-      if (this.selectedSiteName.length > 0) {
+      if (this.currentSiteName().length > 0) {
         Column({ space: 1 }) {
-          Text(this.selectedSiteName)
+          Text(this.currentSiteName())
             .fontSize(16).fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.text_primary'))
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -133,6 +107,18 @@ export struct HomePage {
         }.alignItems(HorizontalAlign.Start)
       }
       Blank()
+
+      Button('刷新')
+        .fontSize(12)
+        .fontColor($r('app.color.hermes_orange'))
+        .height(32)
+        .padding({ left: 12, right: 12 })
+        .borderRadius(8)
+        .backgroundColor($r('app.color.background'))
+        .enabled(!this.isLoading && !this.isLoadingCategory)
+        .onClick(async () => {
+          await this.loadCurrentSiteHome()
+        })
     }
     .width('100%')
     .padding({ left: 16, top: 12 + this.statusBarTop, right: 16, bottom: 12 })
@@ -166,7 +152,7 @@ export struct HomePage {
     Column({ space: 8 }) {
       Blank()
       Text('暂无站点数据').fontSize(14).fontColor($r('app.color.text_secondary'))
-      Text('请前往"设置"页面配置数据源').fontSize(12)
+      Text('请前往设置页解析订阅源').fontSize(12)
         .fontColor($r('app.color.text_secondary'))
       Blank()
     }.width('100%').layoutWeight(1)
@@ -199,7 +185,9 @@ export struct HomePage {
           ? $r('app.color.hermes_orange')
           : $r('app.color.background')
       )
-      .onClick(() => { this.activeCategoryIndex = index })
+      .onClick(async () => {
+        await this.selectCategory(index)
+      })
   }
 
   @Builder
@@ -235,7 +223,7 @@ export struct HomePage {
         Column({ space: 8 }) {
           Blank()
           Text('该分类暂无数据').fontSize(14).fontColor($r('app.color.text_secondary'))
-          Text('点击上方分类可切换').fontSize(12).fontColor($r('app.color.text_secondary'))
+          Text('可切换分类或刷新当前站点').fontSize(12).fontColor($r('app.color.text_secondary'))
           Blank()
         }.width('100%').layoutWeight(1)
       }
@@ -260,12 +248,31 @@ export struct HomePage {
   @Builder
   buildVodCard(vod: VodItem) {
     Column({ space: 6 }) {
-      Image(vod.vod_pic)
+      if (this.isConfigCenterCard(vod)) {
+        Column({ space: 8 }) {
+          Blank()
+          SymbolGlyph($r('sys.symbol.gearshape_fill'))
+            .fontSize(38)
+            .fontColor([$r('app.color.hermes_orange')])
+          Text('配置')
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+          Blank()
+        }
         .width('100%')
         .aspectRatio(0.7)
-        .objectFit(ImageFit.Cover)
         .borderRadius(8)
         .backgroundColor($r('app.color.background'))
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+      } else {
+        Image(vod.vod_pic)
+          .width('100%')
+          .aspectRatio(0.7)
+          .objectFit(ImageFit.Cover)
+          .borderRadius(8)
+          .backgroundColor($r('app.color.background'))
+      }
 
       Text(vod.vod_name)
         .fontSize(13).fontWeight(FontWeight.Medium)
@@ -279,12 +286,24 @@ export struct HomePage {
     }
     .width('100%')
     .onClick(() => {
+      let site = this.currentSite()
+      if (site === null) {
+        return
+      }
+      if (this.isConfigCenterCard(vod)) {
+        this.openConfigCenter(site.name)
+        return
+      }
       router.pushUrl({
         url: 'pages/DetailPage',
         params: {
           vod_id: vod.vod_id,
           vod_name: vod.vod_name,
           vod_pic: vod.vod_pic,
+          resolver_base_url: this.resolverBaseUrl,
+          resolver_source_id: this.resolverSourceId,
+          site_key: site.key,
+          site_name: site.name
         }
       })
     })
@@ -298,14 +317,287 @@ export struct HomePage {
       let item: SiteMenuItem = {
         value: s.name,
         action: () => {
-          this.selectedSiteKey = s.key
-          this.selectedSiteName = s.name
-          this.categories = DEMO_CATEGORIES
-          this.activeCategoryIndex = 0
+          this.selectSite(s.key)
         }
       }
       items.push(item)
     }
     return items
+  }
+
+  private currentSiteName(): string {
+    let site = this.currentSite()
+    if (site === null) {
+      return ''
+    }
+    return site.name
+  }
+
+  private currentSiteBadgeText(): string {
+    let name = this.currentSiteName()
+    if (name.length === 0) {
+      return '选站'
+    }
+    if (name.length <= 3) {
+      return name
+    }
+    return name.substring(0, 3)
+  }
+
+  private currentSite(): SiteSimple | null {
+    if (this.siteList.length === 0) {
+      return null
+    }
+    for (let i = 0; i < this.siteList.length; i++) {
+      let s: SiteSimple = this.siteList[i]
+      if (s.key === this.selectedSiteKey) {
+        return s
+      }
+    }
+    return this.siteList[0]
+  }
+
+  private loadCurrentSiteHomeIfReady(): void {
+    if (this.resolverSourceId.length === 0 || this.siteList.length === 0) {
+      return
+    }
+    let site = this.currentSite()
+    if (site === null) {
+      return
+    }
+    if (this.lastLoadedSourceId === this.resolverSourceId &&
+      this.lastLoadedSiteKey === site.key &&
+      this.categories.length > 0) {
+      return
+    }
+    this.loadCurrentSiteHome()
+  }
+
+  private selectSite(siteKey: string): void {
+    this.selectedSiteKey = siteKey
+    this.categories = []
+    this.configCenterPageUrl = ''
+    this.activeCategoryIndex = 0
+    this.loadCurrentSiteHome()
+  }
+
+  private async selectCategory(index: number): Promise<void> {
+    this.activeCategoryIndex = index
+    await this.loadCategory(index)
+  }
+
+  private async loadCurrentSiteHome(): Promise<void> {
+    let site = this.currentSite()
+    if (site === null) {
+      this.categories = []
+      this.errorMsg = ''
+      return
+    }
+    if (this.resolverBaseUrl.trim().length === 0 || this.resolverSourceId.length === 0) {
+      this.categories = []
+      this.errorMsg = '请先在设置页完成远端解析'
+      return
+    }
+
+    let sourceId: string = this.resolverSourceId
+    let baseUrl: string = this.resolverBaseUrl
+    let siteKey: string = site.key
+    this.selectedSiteKey = siteKey
+    this.isLoading = true
+    this.isLoadingCategory = false
+    this.errorMsg = ''
+    this.configCenterPageUrl = ''
+    this.handlerName = '正在读取分类'
+
+    try {
+      let home = await this.resolverRepository.getSiteHome(baseUrl, sourceId, siteKey)
+      if (sourceId !== this.resolverSourceId || siteKey !== this.selectedSiteKey) {
+        return
+      }
+      this.categories = this.mapCategories(home.categories)
+      this.configCenterPageUrl = this.extractConfigCenterPageUrl(home.categories)
+      this.activeCategoryIndex = 0
+      this.lastLoadedSourceId = sourceId
+      this.lastLoadedSiteKey = siteKey
+      if (this.isConfigCenterSite(site)) {
+        this.handlerName = '配置中心'
+      } else {
+        this.handlerName = '远端分类 ' + this.categories.length.toString() + ' 个'
+      }
+      if (this.categories.length > 0) {
+        await this.loadCategory(0)
+      }
+    } catch (err) {
+      this.categories = []
+      this.errorMsg = this.errorText(err)
+      this.handlerName = ''
+    } finally {
+      this.isLoading = false
+      this.isLoadingCategory = false
+    }
+  }
+
+  private async loadCategory(index: number): Promise<void> {
+    if (index < 0 || index >= this.categories.length) {
+      return
+    }
+    let site = this.currentSite()
+    if (site === null) {
+      return
+    }
+    let sourceId: string = this.resolverSourceId
+    let baseUrl: string = this.resolverBaseUrl
+    let siteKey: string = site.key
+    let typeId: string = this.categories[index].type_id
+    if (sourceId.length === 0 || typeId.length === 0) {
+      return
+    }
+
+    this.isLoadingCategory = true
+    this.errorMsg = ''
+    try {
+      let result = await this.resolverRepository.getCategory(baseUrl, sourceId, siteKey, typeId, 1)
+      if (sourceId !== this.resolverSourceId || siteKey !== this.selectedSiteKey) {
+        return
+      }
+      let vods: VodItem[] = this.mapVods(result.items)
+      let nextCategories: CategoryWithVods[] = []
+      for (let i = 0; i < this.categories.length; i++) {
+        let current: CategoryWithVods = this.categories[i]
+        if (i === index) {
+          nextCategories.push({
+            type_id: current.type_id,
+            type_name: current.type_name,
+            vods: vods
+          })
+        } else {
+          nextCategories.push(current)
+        }
+      }
+      this.categories = nextCategories
+      this.handlerName = '第 ' + result.page.toString() + ' 页 / 共 ' +
+        result.pageCount.toString() + ' 页'
+      if (this.isConfigCenterSite(site)) {
+        this.handlerName = '扫码配置'
+      }
+    } catch (err) {
+      this.errorMsg = this.errorText(err)
+    } finally {
+      this.isLoadingCategory = false
+    }
+  }
+
+  private mapCategories(items: ResolverCategoryItem[]): CategoryWithVods[] {
+    let result: CategoryWithVods[] = []
+    for (let i = 0; i < items.length; i++) {
+      let item: ResolverCategoryItem = items[i]
+      let typeId: string = item.typeId
+      let typeName: string = item.typeName
+      if (typeName.length === 0) {
+        typeName = typeId
+      }
+      if (this.isConfigCenterCategory(typeId, typeName)) {
+        typeName = '配置中心'
+      }
+      if (typeId.length > 0 && typeName.length > 0) {
+        result.push({
+          type_id: typeId,
+          type_name: typeName,
+          vods: []
+        })
+      }
+    }
+    return result
+  }
+
+  private mapVods(items: ResolverVodItem[]): VodItem[] {
+    let result: VodItem[] = []
+    for (let i = 0; i < items.length; i++) {
+      let item: ResolverVodItem = items[i]
+      result.push({
+        vod_id: item.vodId,
+        vod_name: item.vodName,
+        vod_pic: this.posterUrl(item.vodPic),
+        vod_remarks: item.vodRemarks
+      })
+    }
+    return result
+  }
+
+  private posterUrl(url: string): string {
+    let trimmed: string = url.trim()
+    if (trimmed.length > 0) {
+      return trimmed
+    }
+    return EMPTY_POSTER
+  }
+
+  private errorText(err: Object): string {
+    if (err instanceof Error && err.message.length > 0) {
+      return err.message
+    }
+    return '站点内容加载失败'
+  }
+
+  private isConfigCenterSite(site: SiteSimple): boolean {
+    let key: string = site.key.toLowerCase()
+    let name: string = site.name
+    return key.indexOf('nodejs_baseset') >= 0 || key.indexOf('baseset') >= 0 ||
+      name.indexOf('配置') >= 0
+  }
+
+  private isConfigCenterCategory(typeId: string, typeName: string): boolean {
+    let lowerName: string = typeName.toLowerCase()
+    return typeId === 'setting' && lowerName.indexOf('/website') >= 0
+  }
+
+  private isConfigCenterCard(vod: VodItem): boolean {
+    let site = this.currentSite()
+    if (site !== null && this.isConfigCenterSite(site)) {
+      return true
+    }
+    let lowerPic: string = vod.vod_pic.toLowerCase()
+    return vod.vod_name.indexOf('配置') >= 0 && lowerPic.indexOf('/runtime/website') >= 0
+  }
+
+  private openConfigCenter(title: string): void {
+    if (this.resolverSourceId.length === 0) {
+      this.errorMsg = '缺少订阅源上下文'
+      return
+    }
+    let targetUrl: string = this.configCenterPageUrl
+    if (targetUrl.length === 0) {
+      targetUrl = this.resolverRepository.runtimeWebsiteUrl(this.resolverBaseUrl, this.resolverSourceId)
+    }
+    router.pushUrl({
+      url: 'pages/ConfigCenterPage',
+      params: {
+        title: title,
+        page_url: targetUrl,
+        resolver_base_url: this.resolverBaseUrl,
+        resolver_source_id: this.resolverSourceId
+      }
+    })
+  }
+
+  private extractConfigCenterPageUrl(items: ResolverCategoryItem[]): string {
+    for (let i = 0; i < items.length; i++) {
+      let item: ResolverCategoryItem = items[i]
+      if (this.isConfigCenterCategory(item.typeId, item.typeName)) {
+        return this.configCenterUrlFromTypeName(item.typeName)
+      }
+    }
+    return ''
+  }
+
+  private configCenterUrlFromTypeName(typeName: string): string {
+    let lower: string = typeName.toLowerCase()
+    let marker: string = '/website'
+    let markerIndex: number = lower.indexOf(marker)
+    if (markerIndex < 0) {
+      return ''
+    }
+    let pathText: string = typeName.substring(markerIndex)
+    return this.resolverRepository.runtimePathUrl(this.resolverBaseUrl, this.resolverSourceId, pathText)
   }
 }

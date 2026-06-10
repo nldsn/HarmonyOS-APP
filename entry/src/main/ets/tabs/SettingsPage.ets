@@ -1,99 +1,46 @@
-import { common } from '@kit.AbilityKit'
-import { JsDetectResult, JsRuntimePlan } from '../common/model/BridgeModels'
-import { SourceDescriptor } from '../common/model/SourceModels'
+import { ResolverDefaults, ResolverHealthResult, ResolverInspectResult } from '../common/model/ResolverModels'
+import { SiteSimple } from '../common/model/SourceModels'
 import { HttpClient } from '../data/http/HttpClient'
-import { SourceRepository } from '../data/repository/SourceRepository'
-import { CacheStore } from '../data/storage/CacheStore'
-import { JsSandboxView } from '../components/runtime/JsSandboxView'
-import { SourceManager } from '../domain/SourceManager'
-import { JsPluginManager } from '../engine/js/JsPluginManager'
-import { JsRuntimeHost } from '../engine/js/JsRuntimeHost'
+import { ResolverRepository } from '../data/repository/ResolverRepository'
 
 @Component
 export struct SettingsPage {
+  @StorageLink('resolverBaseUrl') resolverUrl: string = ResolverDefaults.BASE_URL
+  @StorageLink('resolverSourceId') resolverSourceId: string = ''
   @State private sourceUrl: string = 'https://9280.kstore.vip/cat/index.js.md5'
   @State private isLoading: boolean = false
   @State private statusMsg: string = ''
   @State private isError: boolean = false
-  @State private currentSource: SourceDescriptor | null = null
-  @State private detectMsg: string = ''
-  @State private hasWebsiteBundle: boolean = false
-  @State private hasWebsiteBundleString: boolean = false
-  @State private hasModuleExports: boolean = false
-  @State private hasWindowAccess: boolean = false
-  @State private hasServerFactory: boolean = false
-  @State private hasStartFunction: boolean = false
-  @State private hasFullConfigRoute: boolean = false
-  @State private hasSitesListRoute: boolean = false
-  @State private defaultServerPort: number = 0
-  @State private runtimePlan: string = ''
-  @StorageLink('jsSandboxScript') sandboxScript: string = ''
-  @StorageLink('jsSandboxCommand') sandboxCommand: string = ''
-  @StorageLink('jsSandboxResult') sandboxResult: string = ''
-  @StorageLink('jsSandboxState') sandboxState: string = 'idle'
+  @State private resolverVersion: string = ''
+  @State private inspectResult: ResolverInspectResult | null = null
+  @State private healthResult: ResolverHealthResult | null = null
+  @StorageLink('siteList') siteList: SiteSimple[] = []
   @StorageProp('statusBarTop') statusBarTop: number = 44
 
-  private sourceManager: SourceManager | null = null
-  private pluginManager: JsPluginManager | null = null
+  private resolverRepository: ResolverRepository = new ResolverRepository(new HttpClient())
+  private resolverInputController: TextInputController = new TextInputController()
+  private sourceInputController: TextInputController = new TextInputController()
 
-  aboutToAppear(): void {
-    this.ensureManager()
-    this.restoreCurrentSource()
-  }
-
-  private ensureManager(): SourceManager | null {
-    if (this.sourceManager !== null) {
-      return this.sourceManager
-    }
-    let context = getContext(this) as common.UIAbilityContext
-    if (context === null || context === undefined) {
-      return null
-    }
-    let cacheStore = new CacheStore(context)
-    let repository = new SourceRepository(cacheStore)
-    let runtimeHost = new JsRuntimeHost()
-    this.pluginManager = new JsPluginManager(repository, runtimeHost)
-    this.sourceManager = new SourceManager(new HttpClient(), repository)
-    return this.sourceManager
-  }
-
-  private restoreCurrentSource(): void {
-    let manager = this.ensureManager()
-    if (manager === null) {
-      return
-    }
-    this.currentSource = manager.getCurrentSource()
-    if (this.currentSource !== null) {
-      this.sourceUrl = this.currentSource.inputUrl
-      this.statusMsg = '已恢复上次缓存的 JS 订阅源'
-      this.isError = false
-      this.detectCachedScript()
-    }
-  }
-
-  private async loadSource(): Promise<void> {
-    let manager = this.ensureManager()
-    if (manager === null) {
-      this.statusMsg = '无法获取应用上下文'
+  private async checkResolverHealth(): Promise<void> {
+    this.stopAllEditing()
+    if (this.resolverUrl.trim().length === 0) {
+      this.statusMsg = '请输入 Resolver 服务地址'
       this.isError = true
       return
     }
 
     this.isLoading = true
-    this.statusMsg = '正在拉取 MD5 与 JS 订阅源...'
     this.isError = false
-
+    this.statusMsg = '正在检测 Resolver 连通性...'
     try {
-      let result = await manager.loadSource({
-        inputUrl: this.sourceUrl,
-        displayName: 'Mira/Cat JS 源'
-      })
-      this.currentSource = result.descriptor
-      this.detectCachedScript()
-      this.statusMsg = result.changed ? 'JS 订阅源已下载并缓存' : '本地缓存已是最新'
+      let result = await this.resolverRepository.checkHealth(this.resolverUrl)
+      this.healthResult = result
+      this.resolverVersion = this.versionFromHealth(result)
+      this.statusMsg = 'Resolver 连通成功，版本 ' + this.resolverVersion
       this.isError = false
     } catch (err) {
-      this.currentSource = null
+      this.healthResult = null
+      this.resolverVersion = ''
       this.statusMsg = this.errorText(err)
       this.isError = true
     } finally {
@@ -101,89 +48,62 @@ export struct SettingsPage {
     }
   }
 
-  private detectCachedScript(): void {
-    let manager = this.pluginManager
-    if (manager === null) {
-      this.detectMsg = ''
-      this.hasWebsiteBundle = false
-      this.hasWebsiteBundleString = false
-      this.hasModuleExports = false
-      this.hasWindowAccess = false
-      this.hasServerFactory = false
-      this.hasStartFunction = false
-      this.hasFullConfigRoute = false
-      this.hasSitesListRoute = false
-      this.defaultServerPort = 0
-      this.runtimePlan = ''
+  private async inspectRemoteSource(): Promise<void> {
+    this.stopAllEditing()
+    if (this.resolverUrl.trim().length === 0) {
+      this.statusMsg = '请输入 Resolver 服务地址'
+      this.isError = true
       return
     }
-    let result = manager.prepareCachedRuntime()
-    this.applyDetectResult(result)
-  }
-
-  private runSandboxProbe(): void {
-    if (this.isSandboxProbeRunning()) {
+    if (this.sourceUrl.trim().length === 0) {
+      this.statusMsg = '请输入订阅源地址'
+      this.isError = true
       return
     }
-    let manager = this.pluginManager
-    if (manager === null) {
-      this.sandboxState = 'missing_manager'
-      return
-    }
-    let script = manager.buildSandboxLoadScript()
-    if (script.length === 0) {
-      this.sandboxState = 'missing_script'
-      return
-    }
-    this.sandboxScript = script
-    this.sandboxResult = ''
-    this.sandboxCommand = 'load'
-  }
 
-  private isSandboxProbeRunning(): boolean {
-    return this.sandboxState === 'loading' ||
-      this.sandboxState === 'injecting' ||
-      this.sandboxState.indexOf('injecting ') === 0 ||
-      this.sandboxState === 'evaluating' ||
-      this.sandboxState === 'probing'
-  }
+    this.isLoading = true
+    this.isError = false
+    this.statusMsg = '正在请求远端解析服务...'
 
-  private applyDetectResult(result: JsDetectResult): void {
-    this.detectMsg = result.message
-    this.hasWebsiteBundle = result.hasWebsiteBundle
-    this.hasWebsiteBundleString = result.hasWebsiteBundleString
-    this.hasModuleExports = result.hasModuleExports
-    this.hasWindowAccess = result.hasWindow
-    this.hasServerFactory = result.hasServerFactory
-    this.hasStartFunction = result.hasStartFunction
-    this.hasFullConfigRoute = result.hasFullConfigRoute
-    this.hasSitesListRoute = result.hasSitesListRoute
-    this.defaultServerPort = result.defaultPort
-    this.runtimePlan = this.resolveRuntimePlan(result)
-  }
-
-  private resolveRuntimePlan(result: JsDetectResult): string {
-    if (result.hasServerFactory || result.hasFullConfigRoute) {
-      return JsRuntimePlan.LOCAL_SERVER
+    try {
+      await this.refreshResolverVersion()
+      let result = await this.resolverRepository.inspectSource(this.resolverUrl, this.sourceUrl)
+      this.inspectResult = result
+      this.resolverSourceId = result.sourceId
+      let loadedSites: SiteSimple[] = result.sites
+      if (loadedSites.length === 0) {
+        this.statusMsg = '正在启动远端运行时并加载站点...'
+        let sitesResult = await this.resolverRepository.getSites(this.resolverUrl, result.sourceId)
+        loadedSites = sitesResult.sites
+        result.sites = loadedSites
+      }
+      this.inspectResult = result
+      if (loadedSites.length > 0) {
+        this.siteList = loadedSites
+      }
+      this.statusMsg = '远端解析成功，已加载 ' + loadedSites.length.toString() + ' 个站点'
+      this.isError = false
+    } catch (err) {
+      this.inspectResult = null
+      this.statusMsg = this.errorText(err)
+      this.isError = true
+    } finally {
+      this.isLoading = false
     }
-    if (result.hasWebsiteBundle) {
-      return JsRuntimePlan.WEB_BUNDLE_ONLY
-    }
-    return JsRuntimePlan.UNKNOWN
   }
 
   private errorText(err: Object): string {
     if (err instanceof Error && err.message.length > 0) {
       return err.message
     }
-    return '订阅源加载失败'
+    return '远端解析检测失败'
   }
 
-  private sourceSizeText(): string {
-    if (this.currentSource === null) {
+  private scriptSizeText(): string {
+    if (this.inspectResult === null) {
       return ''
     }
-    let size = this.currentSource.scriptSize
+    let size = this.inspectResult.scriptSize
     if (size >= 1024 * 1024) {
       return (size / 1024 / 1024).toFixed(2) + ' MB'
     }
@@ -193,38 +113,18 @@ export struct SettingsPage {
     return size.toString() + ' B'
   }
 
-  private cachedAtText(): string {
-    if (this.currentSource === null) {
-      return ''
-    }
-    return new Date(this.currentSource.cachedAt).toLocaleString()
-  }
-
   build() {
-    Stack() {
-      JsSandboxView()
-
+    Column() {
       Scroll() {
         Column({ space: 12 }) {
-          Text('源地址')
-            .fontSize(14)
-            .fontColor($r('app.color.text_primary'))
+          this.buildTextInput('Resolver 地址', '请输入远端解析服务地址', this.resolverUrl, true)
+          Text('真机调试请填写电脑局域网 IP，例如 http://192.168.0.166:8787')
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
             .width('100%')
+            .padding({ left: 4 })
 
-          TextInput({
-            placeholder: '请输入源地址',
-            text: this.sourceUrl
-          })
-            .fontSize(14)
-            .placeholderColor($r('app.color.text_secondary'))
-            .placeholderFont({ size: 14 })
-            .backgroundColor($r('app.color.card_background'))
-            .borderRadius(12)
-            .height(48)
-            .padding({ left: 16, right: 16 })
-            .onChange((value: string) => {
-              this.sourceUrl = value
-            })
+          this.buildTextInput('订阅源地址', '请输入 index.js.md5 地址', this.sourceUrl, false)
 
           if (this.statusMsg.length > 0) {
             Text(this.statusMsg)
@@ -238,37 +138,44 @@ export struct SettingsPage {
               .padding({ left: 4 })
           }
 
-          Button(this.isLoading ? '加载中...' : '加载 JS 订阅源')
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(Color.White)
-            .width('100%')
-            .height(48)
-            .borderRadius(12)
-            .backgroundColor(
-              this.isLoading ? $r('app.color.text_secondary')
-                : $r('app.color.hermes_orange')
-            )
-            .enabled(!this.isLoading)
-            .onClick(async () => {
-              await this.loadSource()
-            })
-
-          if (this.currentSource !== null) {
-            Button(this.isSandboxProbeRunning() ? '沙箱探测中...' : '运行沙箱探测')
-              .fontSize(15)
+          Row({ space: 10 }) {
+            Button(this.isLoading ? '检测中...' : '连通性')
+              .fontSize(14)
               .fontWeight(FontWeight.Medium)
               .fontColor($r('app.color.hermes_orange'))
-              .width('100%')
-              .height(44)
-              .borderRadius(10)
+              .layoutWeight(1)
+              .height(48)
+              .borderRadius(12)
               .backgroundColor($r('app.color.card_background'))
-              .enabled(!this.isSandboxProbeRunning())
-              .onClick(() => {
-                this.runSandboxProbe()
+              .enabled(!this.isLoading)
+              .onClick(async () => {
+                await this.checkResolverHealth()
               })
 
-            this.buildSourceInfo()
+            Button(this.isLoading ? '检测中...' : '解析检测')
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(Color.White)
+              .layoutWeight(1)
+              .height(48)
+              .borderRadius(12)
+              .backgroundColor(
+                this.isLoading ? $r('app.color.text_secondary')
+                  : $r('app.color.hermes_orange')
+              )
+              .enabled(!this.isLoading)
+              .onClick(async () => {
+                await this.inspectRemoteSource()
+              })
+          }
+          .width('100%')
+
+          if (this.inspectResult !== null) {
+            this.buildResolverInfo()
+          }
+
+          if (this.healthResult !== null && this.inspectResult === null) {
+            this.buildHealthInfo()
           }
 
           Column().height(120)
@@ -286,26 +193,74 @@ export struct SettingsPage {
   }
 
   @Builder
-  buildSourceInfo() {
+  buildTextInput(label: string, placeholder: string, textValue: string, isResolver: boolean) {
     Column({ space: 8 }) {
-      this.buildInfoRow('协议', this.currentSourceProtocol())
-      this.buildInfoRow('MD5', this.currentSourceMd5())
-      this.buildInfoRow('大小', this.sourceSizeText())
-      this.buildInfoRow('缓存时间', this.cachedAtText())
-      this.buildInfoRow('探测结果', this.detectMsg)
-      this.buildInfoRow('websiteBundle', this.flagText(this.hasWebsiteBundle))
-      this.buildInfoRow('websiteBundle 字符串', this.flagText(this.hasWebsiteBundleString))
-      this.buildInfoRow('module.exports', this.flagText(this.hasModuleExports))
-      this.buildInfoRow('window 访问', this.flagText(this.hasWindowAccess))
-      this.buildInfoRow('JS Server', this.flagText(this.hasServerFactory))
-      this.buildInfoRow('启动入口', this.flagText(this.hasStartFunction))
-      this.buildInfoRow('/full-config', this.flagText(this.hasFullConfigRoute))
-      this.buildInfoRow('/sites/list', this.flagText(this.hasSitesListRoute))
-      this.buildInfoRow('默认端口', this.serverPortText())
-      this.buildInfoRow('运行计划', this.runtimePlan)
-      this.buildInfoRow('沙箱状态', this.sandboxState)
-      this.buildInfoRow('沙箱结果', this.sandboxResult)
-      this.buildInfoRow('脚本地址', this.currentSourceScriptUrl())
+      Text(label)
+        .fontSize(14)
+        .fontColor($r('app.color.text_primary'))
+        .width('100%')
+
+      TextInput({
+        placeholder: placeholder,
+        text: textValue,
+        controller: this.textInputController(isResolver)
+      })
+        .fontSize(14)
+        .placeholderColor($r('app.color.text_secondary'))
+        .placeholderFont({ size: 14 })
+        .backgroundColor($r('app.color.card_background'))
+        .borderRadius(12)
+        .height(48)
+        .padding({ left: 16, right: 16 })
+        .enterKeyType(EnterKeyType.Done)
+        .onChange((value: string) => {
+          if (isResolver) {
+            this.resolverUrl = value
+          } else {
+            this.sourceUrl = value
+          }
+        })
+        .onSubmit((enterKey: EnterKeyType, event: SubmitEvent) => {
+          this.stopEditing(isResolver)
+        })
+    }
+    .width('100%')
+  }
+
+  @Builder
+  buildHealthInfo() {
+    Column({ space: 8 }) {
+      this.buildInfoRow('服务', this.healthServiceText())
+      this.buildInfoRow('版本', this.healthVersionText())
+      this.buildInfoRow('运行时', this.healthRuntimeText())
+      this.buildInfoRow('缓存源数量', this.healthSourcesText())
+    }
+    .width('100%')
+    .padding(12)
+    .borderRadius(8)
+    .backgroundColor($r('app.color.card_background'))
+  }
+
+  @Builder
+  buildResolverInfo() {
+    Column({ space: 8 }) {
+      this.buildInfoRow('解析模式', 'remote_node')
+      this.buildInfoRow('服务版本', this.resolverVersionText())
+      this.buildInfoRow('Source ID', this.resultSourceId())
+      this.buildInfoRow('协议', this.resultProtocol())
+      this.buildInfoRow('MD5', this.resultMd5())
+      this.buildInfoRow('大小', this.scriptSizeText())
+      this.buildInfoRow('运行时', this.resultRuntime())
+      this.buildInfoRow('检测结果', this.resultMessage())
+      this.buildInfoRow('websiteBundle', this.flagText(this.resultHasWebsiteBundle()))
+      this.buildInfoRow('module.exports', this.flagText(this.resultHasModuleExports()))
+      this.buildInfoRow('window 访问', this.flagText(this.resultHasWindowAccess()))
+      this.buildInfoRow('JS Server', this.flagText(this.resultHasServerFactory()))
+      this.buildInfoRow('/full-config', this.flagText(this.resultHasFullConfigRoute()))
+      this.buildInfoRow('/sites/list', this.flagText(this.resultHasSitesListRoute()))
+      this.buildInfoRow('默认端口', this.resultDefaultPortText())
+      this.buildInfoRow('站点数', this.resultSiteCountText())
+      this.buildInfoRow('脚本地址', this.resultScriptUrl())
     }
     .width('100%')
     .padding(12)
@@ -331,44 +286,184 @@ export struct SettingsPage {
     .alignItems(HorizontalAlign.Start)
   }
 
-  private currentSourceProtocol(): string {
-    if (this.currentSource === null) {
+  private resultSourceId(): string {
+    if (this.inspectResult === null) {
       return ''
     }
-    return this.currentSource.protocol
+    return this.inspectResult.sourceId
   }
 
-  private currentSourceMd5(): string {
-    if (this.currentSource === null) {
-      return ''
+  private textInputController(isResolver: boolean): TextInputController {
+    if (isResolver) {
+      return this.resolverInputController
     }
-    return this.currentSource.md5
+    return this.sourceInputController
   }
 
-  private currentSourceScriptUrl(): string {
-    if (this.currentSource === null) {
+  private stopEditing(isResolver: boolean): void {
+    this.textInputController(isResolver).stopEditing()
+  }
+
+  private stopAllEditing(): void {
+    this.resolverInputController.stopEditing()
+    this.sourceInputController.stopEditing()
+  }
+
+  private async refreshResolverVersion(): Promise<void> {
+    try {
+      let result = await this.resolverRepository.checkHealth(this.resolverUrl)
+      this.healthResult = result
+      this.resolverVersion = this.versionFromHealth(result)
+    } catch (err) {
+      this.healthResult = null
+      this.resolverVersion = ''
+    }
+  }
+
+  private versionFromHealth(result: ResolverHealthResult): string {
+    let version: string | undefined = result.version
+    if (version === undefined || version.length === 0) {
+      return '旧版本或未上报'
+    }
+    return version
+  }
+
+  private resolverVersionText(): string {
+    if (this.resolverVersion.length === 0) {
+      return '未连接'
+    }
+    return this.resolverVersion
+  }
+
+  private healthServiceText(): string {
+    if (this.healthResult === null) {
       return ''
     }
-    return this.currentSource.scriptUrl
+    return this.healthResult.service
+  }
+
+  private healthRuntimeText(): string {
+    if (this.healthResult === null) {
+      return ''
+    }
+    return this.healthResult.runtime
+  }
+
+  private healthVersionText(): string {
+    if (this.healthResult === null) {
+      return ''
+    }
+    return this.versionFromHealth(this.healthResult)
+  }
+
+  private healthSourcesText(): string {
+    if (this.healthResult === null) {
+      return '0'
+    }
+    return this.healthResult.sources.toString()
+  }
+
+  private resultProtocol(): string {
+    if (this.inspectResult === null) {
+      return ''
+    }
+    return this.inspectResult.protocol
+  }
+
+  private resultMd5(): string {
+    if (this.inspectResult === null) {
+      return ''
+    }
+    return this.inspectResult.md5
+  }
+
+  private resultRuntime(): string {
+    if (this.inspectResult === null) {
+      return ''
+    }
+    return this.inspectResult.runtime
+  }
+
+  private resultMessage(): string {
+    if (this.inspectResult === null) {
+      return ''
+    }
+    return this.inspectResult.message
+  }
+
+  private resultScriptUrl(): string {
+    if (this.inspectResult === null) {
+      return ''
+    }
+    return this.inspectResult.scriptUrl
+  }
+
+  private resultHasWebsiteBundle(): boolean {
+    if (this.inspectResult === null) {
+      return false
+    }
+    return this.inspectResult.features.hasWebsiteBundle
+  }
+
+  private resultHasModuleExports(): boolean {
+    if (this.inspectResult === null) {
+      return false
+    }
+    return this.inspectResult.features.hasModuleExports
+  }
+
+  private resultHasWindowAccess(): boolean {
+    if (this.inspectResult === null) {
+      return false
+    }
+    return this.inspectResult.features.hasWindowAccess
+  }
+
+  private resultHasServerFactory(): boolean {
+    if (this.inspectResult === null) {
+      return false
+    }
+    return this.inspectResult.features.hasServerFactory
+  }
+
+  private resultHasFullConfigRoute(): boolean {
+    if (this.inspectResult === null) {
+      return false
+    }
+    return this.inspectResult.features.hasFullConfigRoute
+  }
+
+  private resultHasSitesListRoute(): boolean {
+    if (this.inspectResult === null) {
+      return false
+    }
+    return this.inspectResult.features.hasSitesListRoute
+  }
+
+  private resultDefaultPortText(): string {
+    if (this.inspectResult === null || this.inspectResult.features.defaultPort <= 0) {
+      return '未识别'
+    }
+    return this.inspectResult.features.defaultPort.toString()
+  }
+
+  private resultSiteCountText(): string {
+    if (this.inspectResult === null) {
+      return '0'
+    }
+    return this.inspectResult.sites.length.toString()
   }
 
   private flagText(flag: boolean): string {
     return flag ? '是' : '否'
   }
 
-  private serverPortText(): string {
-    if (this.defaultServerPort <= 0) {
-      return '未识别'
-    }
-    return this.defaultServerPort.toString()
-  }
-
   private infoValueMaxLines(label: string): number {
-    if (label === '沙箱结果') {
-      return 18
-    }
     if (label === '脚本地址') {
       return 3
+    }
+    if (label === '检测结果') {
+      return 4
     }
     return 2
   }
