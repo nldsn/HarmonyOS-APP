@@ -206,7 +206,7 @@ struct DetailPage {
         .fontColor(Color.White)
         .textAlign(TextAlign.Center)
         .maxLines(2)
-        .shadow({ radius: 8, color: '#40000000', offsetY: 4 })
+        .textShadow({ radius: 8, color: '#40000000', offsetX: 0, offsetY: 4 })
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .width('100%')
 
@@ -289,19 +289,15 @@ struct DetailPage {
   @Builder
   buildTopBar() {
     Row() {
-      Button() {
+      Button({ type: ButtonType.Circle }) {
         SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(21)
+          .fontSize(20)
           .fontColor([Color.White])
       }
       .width(38)
       .height(38)
-      .borderRadius(19)
-      .backgroundColor('#33000000')
-      .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THICK)
-      .border({ width: 1, color: '#33FFFFFF' })
-      .shadow({ radius: 18, color: '#66000000', offsetY: 6 })
-      .hoverEffect(HoverEffect.Highlight)
+      .backgroundColor(Color.Transparent)
+      .border({ width: 1.5, color: '#66FFFFFF' })
       .onClick(() => {
         router.back()
       })
@@ -309,7 +305,7 @@ struct DetailPage {
       Blank()
     }
     .width('100%')
-    .padding({ left: 18, top: 48, right: 18 })
+    .padding({ left: 10, top: 48, right: 18 })
   }
 
   @Builder
