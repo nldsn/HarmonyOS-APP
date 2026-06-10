@@ -1,4 +1,6 @@
 import { router } from '@kit.ArkUI'
+import { HdsNavigation, HdsNavigationTitleMode, HdsNavigationMenuContentOptions,
+  ScrollEffectType, hdsMaterial } from '@kit.UIDesignKit'
 import { common } from '@kit.AbilityKit'
 import { PanCookieProfile, PanPlayRequest, PanPlayResult } from '../common/model/PanModels'
 import {
@@ -86,6 +88,25 @@ struct DetailPage {
 
   private resolverRepository: ResolverRepository = new ResolverRepository(new HttpClient())
   private quarkPanRepository: QuarkPanRepository = new QuarkPanRepository()
+  private scrollerForScroll: Scroller = new Scroller()
+  private menus: HdsNavigationMenuContentOptions = {
+    value: [{
+      content: {
+        label: '搜索',
+        icon: $r('sys.symbol.magnifyingglass')
+      }
+    }, {
+      content: {
+        label: '喜欢',
+        icon: $r('sys.symbol.heart')
+      }
+    }, {
+      content: {
+        label: '更多',
+        icon: $r('sys.symbol.ellipsis_circle')
+      }
+    }]
+  }
 
   aboutToAppear(): void {
     let params = router.getParams()
@@ -128,8 +149,8 @@ struct DetailPage {
       if (this.errorMsg.length > 0 && this.sources.length === 0 && !this.isLoading) {
         this.buildError()
       } else {
-        Stack({ alignContent: Alignment.TopStart }) {
-          Scroll() {
+        HdsNavigation() {
+          Scroll(this.scrollerForScroll) {
             Column() {
               this.buildPosterHero()
               this.buildIntroBlock()
@@ -148,11 +169,32 @@ struct DetailPage {
             .width('100%')
           }
           .scrollBar(BarState.Auto)
-          .layoutWeight(1)
-
-          this.buildTopBar()
+          .height('100%')
         }
-        .width('100%')
+        .mode(NavigationMode.Stack)
+        .titleBar({
+          content: {
+            title: {
+              mainTitle: '',
+            },
+            menu: this.menus,
+          },
+          style: {
+            scrollEffectOpts: {
+              enableScrollEffect: false,
+              scrollEffectType: ScrollEffectType.GRADIENT_BLUR,
+            },
+            systemMaterialEffect: {
+              materialType: hdsMaterial.MaterialType.IMMERSIVE,
+              materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+            },
+          },
+          avoidLayoutSafeArea: true,
+          enableComponentSafeArea: false
+        })
+        .bindToScrollable([this.scrollerForScroll])
+        .hideBackButton(false)
+        .titleMode(HdsNavigationTitleMode.MINI)
         .layoutWeight(1)
       }
     }
@@ -187,7 +229,6 @@ struct DetailPage {
       Column({ space: 13 }) {
         this.buildTitleLockup()
         this.buildContinueButton()
-        this.buildActionRow()
       }
       .width('100%')
       .padding({ left: 24, right: 24, bottom: 22 })
@@ -257,55 +298,6 @@ struct DetailPage {
     .onClick(async () => {
       await this.resolveActiveEpisode()
     })
-  }
-
-  @Builder
-  buildActionRow() {
-    Row({ space: 24 }) {
-      this.buildActionIcon($r('sys.symbol.magnifyingglass'))
-      this.buildActionIcon($r('sys.symbol.heart_fill'))
-      this.buildActionIcon($r('sys.symbol.ellipsis_circle'))
-    }
-    .width('100%')
-    .height(44)
-    .justifyContent(FlexAlign.Center)
-    .alignSelf(ItemAlign.Center)
-    .alignItems(VerticalAlign.Center)
-  }
-
-  @Builder
-  buildActionIcon(icon: Resource) {
-    Button() {
-      SymbolGlyph(icon)
-        .fontSize(20)
-        .fontColor([Color.White])
-    }
-    .width(40)
-    .height(40)
-    .borderRadius(20)
-    .backgroundColor('#18FFFFFF')
-  }
-
-  @Builder
-  buildTopBar() {
-    Row() {
-      Button({ type: ButtonType.Circle }) {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([Color.White])
-      }
-      .width(38)
-      .height(38)
-      .backgroundColor(Color.Transparent)
-      .border({ width: 1.5, color: '#66FFFFFF' })
-      .onClick(() => {
-        router.back()
-      })
-
-      Blank()
-    }
-    .width('100%')
-    .padding({ left: 10, top: 48, right: 18 })
   }
 
   @Builder
