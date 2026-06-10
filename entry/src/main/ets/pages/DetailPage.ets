@@ -125,9 +125,7 @@ struct DetailPage {
 
   build() {
     Column() {
-      if (this.isLoading) {
-        this.buildSkeleton()
-      } else if (this.errorMsg.length > 0 && this.sources.length === 0) {
+      if (this.errorMsg.length > 0 && this.sources.length === 0 && !this.isLoading) {
         this.buildError()
       } else {
         Stack({ alignContent: Alignment.TopStart }) {
@@ -135,7 +133,15 @@ struct DetailPage {
             Column() {
               this.buildPosterHero()
               this.buildIntroBlock()
-              this.buildSourceSection()
+              if (this.isLoading) {
+                LoadingProgress()
+                  .width(40)
+                  .height(40)
+                  .color($r('app.color.hermes_orange'))
+                  .margin({ top: 40 })
+              } else {
+                this.buildSourceSection()
+              }
               this.buildPlayStatus()
               Column().height(48)
             }
@@ -152,7 +158,7 @@ struct DetailPage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#201D19')
+    .backgroundColor('#5A524A')
   }
 
   @Builder
@@ -164,12 +170,6 @@ struct DetailPage {
         .objectFit(ImageFit.Cover)
         .syncLoad(false)
         .backgroundColor('#241F1A')
-        .opacity(0.32)
-
-      Column()
-        .width('100%')
-        .height(600)
-        .backgroundColor('#66201D19')
 
       Column()
         .width('100%')
@@ -178,22 +178,13 @@ struct DetailPage {
           direction: GradientDirection.Bottom,
           colors: [
             ['#00000000', 0.0],
-            ['#33201D19', 0.35],
-            ['#CC201D19', 0.76],
-            ['#FF201D19', 1.0]
+            ['#335A524A', 0.35],
+            ['#CC5A524A', 0.76],
+            ['#FF5A524A', 1.0]
           ]
         })
 
       Column({ space: 13 }) {
-        Image(this.vodPic)
-          .width(152)
-          .height(218)
-          .objectFit(ImageFit.Cover)
-          .syncLoad(false)
-          .borderRadius(18)
-          .backgroundColor('#2B2722')
-          .shadow({ radius: 24, color: '#7A000000', offsetY: 10 })
-
         this.buildTitleLockup()
         this.buildContinueButton()
         this.buildActionRow()
@@ -210,38 +201,23 @@ struct DetailPage {
   buildTitleLockup() {
     Column({ space: 12 }) {
       Text(this.vodName)
-        .fontSize(this.heroTitleSize())
-        .fontWeight(FontWeight.Bold)
+        .fontSize(28)
+        .fontWeight(FontWeight.Bolder)
         .fontColor(Color.White)
         .textAlign(TextAlign.Center)
         .maxLines(2)
+        .shadow({ radius: 8, color: '#40000000', offsetY: 4 })
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .width('100%')
 
       Text(this.metaLine())
-        .fontSize(16)
+        .fontSize(14)
         .fontWeight(FontWeight.Medium)
         .fontColor('#F4EFE8')
         .textAlign(TextAlign.Center)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .width('100%')
-
-      Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center }) {
-        if (this.typeName.length > 0) {
-          this.buildTag(this.typeName)
-        }
-        if (this.vodYear.length > 0) {
-          this.buildTag(this.vodYear)
-        }
-        if (this.vodArea.length > 0) {
-          this.buildTag(this.vodArea)
-        }
-        if (this.vodRemarks.length > 0) {
-          this.buildTag(this.vodRemarks)
-        }
-      }
-      .width('100%')
     }
     .width('100%')
   }
@@ -316,14 +292,14 @@ struct DetailPage {
       Button() {
         SymbolGlyph($r('sys.symbol.chevron_left'))
           .fontSize(21)
-          .fontColor(['#201D19'])
+          .fontColor([Color.White])
       }
       .width(38)
       .height(38)
       .borderRadius(19)
-      .backgroundColor('#F7F1E9')
+      .backgroundColor('#33000000')
       .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THICK)
-      .border({ width: 1, color: '#CCFFFFFF' })
+      .border({ width: 1, color: '#33FFFFFF' })
       .shadow({ radius: 18, color: '#66000000', offsetY: 6 })
       .hoverEffect(HoverEffect.Highlight)
       .onClick(() => {
@@ -360,7 +336,7 @@ struct DetailPage {
     }
     .width('100%')
     .padding({ left: 22, right: 22, top: 4, bottom: 24 })
-    .backgroundColor('#201D19')
+    .backgroundColor(Color.Transparent)
     .onClick(() => {
       this.showFullIntro = !this.showFullIntro
     })
@@ -407,7 +383,7 @@ struct DetailPage {
       }
       .width('100%')
       .padding({ bottom: 8 })
-      .backgroundColor('#201D19')
+      .backgroundColor(Color.Transparent)
     }
   }
 
@@ -486,19 +462,21 @@ struct DetailPage {
       .height(106)
 
       Text(ep.title)
-        .fontSize(16)
+        .fontSize(15)
         .fontWeight(FontWeight.Bold)
         .fontColor(Color.White)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .width(188)
-
-      Text(this.epSizeText(ep))
-        .fontSize(12)
-        .fontColor('#BEB6AA')
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width(188)
+        
+      if (ep.fileName && ep.fileName !== ep.title) {
+        Text(ep.fileName)
+          .fontSize(12)
+          .fontColor('#BEB6AA')
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width(188)
+      }
     }
     .width(188)
     .onClick(async () => {
@@ -518,46 +496,22 @@ struct DetailPage {
         .borderRadius(18)
         .backgroundColor('#2B2722')
     } else {
-      Column({ space: 7 }) {
-        Row() {
-          Text(this.panBadgeText(ep))
-            .fontSize(11)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#FFE0C0')
-            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-            .borderRadius(6)
-            .backgroundColor('#33F37021')
-            .border({ width: 1, color: '#55F37021' })
-          Blank()
-          Text(this.fileExtText(ep))
-            .fontSize(11)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#F8F6F2')
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
-
+      Column() {
         Text(this.fileCardTitle(ep))
           .fontSize(13)
           .fontWeight(FontWeight.Bold)
           .fontColor(Color.White)
-          .maxLines(2)
+          .maxLines(3)
           .lineHeight(17)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
-
-        Text(this.fileCardSubTitle(ep))
-          .fontSize(10)
-          .fontColor('#BEB6AA')
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
       }
-      .width(188)
-      .height(106)
-      .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+      .width('100%')
+      .height('100%')
+      .padding(14)
+      .justifyContent(FlexAlign.Center)
       .borderRadius(18)
-      .backgroundColor('#302922')
+      .backgroundColor('#2B2722')
       .linearGradient({
         direction: GradientDirection.Bottom,
         colors: [
@@ -589,7 +543,7 @@ struct DetailPage {
       }
       .width('100%')
       .padding({ left: 22, right: 22, top: 8, bottom: 4 })
-      .backgroundColor('#201D19')
+      .backgroundColor(Color.Transparent)
     }
   }
 
@@ -605,37 +559,7 @@ struct DetailPage {
       .border({ width: 1, color: '#44FFFFFF' })
   }
 
-  @Builder
-  buildSkeleton() {
-    Column() {
-      Row()
-        .width('100%')
-        .height(360)
-        .backgroundColor('#2B2722')
-      Column({ space: 8 }) {
-        Row()
-          .width('45%')
-          .height(18)
-          .borderRadius(4)
-          .backgroundColor('#3B352E')
-        Row()
-          .width('100%')
-          .height(12)
-          .borderRadius(4)
-          .backgroundColor('#3B352E')
-        Row()
-          .width('76%')
-          .height(12)
-          .borderRadius(4)
-          .backgroundColor('#3B352E')
-      }
-      .width('100%')
-      .padding(22)
-      .alignItems(HorizontalAlign.Start)
-    }
-    .width('100%')
-    .backgroundColor('#201D19')
-  }
+
 
   @Builder
   buildError() {
@@ -805,16 +729,26 @@ struct DetailPage {
 
     this.isResolvingPlay = true
     this.errorMsg = ''
-    this.playMessage = '正在解析：' + ep.title
     try {
       if (this.isDirectMediaUrl(ep.url)) {
-        this.playMessage = '直链资源，正在进入播放页'
         this.openPlayer(ep.url, ep.title, ep.pic, 'direct', '直链播放', '')
       } else if (this.isQuarkEpisode(ep)) {
-        let localResolved: boolean = await this.resolveByLocalPan(ep)
-        if (!localResolved) {
-          this.playMessage = this.nonEmptyText(this.playMessage, '本地夸克解析失败，请检查账号或剧集数据')
+        let cookie: string = await this.localQuarkCookie()
+        if (cookie.length === 0) {
+          this.playMessage = '未同步夸克账号，请先到配置中心扫码登录'
+          this.isResolvingPlay = false
+          return
         }
+        let req = this.panPlayRequest(ep)
+        router.pushUrl({
+          url: 'pages/PlayerPage',
+          params: {
+            title: ep.title,
+            cover: this.nonEmptyText(ep.pic, this.vodPic),
+            quark_request_json: JSON.stringify(req),
+            quark_cookie: cookie
+          }
+        })
       } else {
         this.playMessage = '当前剧集不是直链或夸克网盘资源，暂未接入 App 本地播放'
       }
@@ -823,27 +757,6 @@ struct DetailPage {
     } finally {
       this.isResolvingPlay = false
     }
-  }
-
-  private async resolveByLocalPan(ep: PlayEp): Promise<boolean> {
-    if (!this.isQuarkEpisode(ep)) {
-      return false
-    }
-    let cookie: string = await this.localQuarkCookie()
-    if (cookie.length === 0) {
-      this.playMessage = '未同步夸克账号，请先到配置中心扫码登录'
-      return false
-    }
-    this.playMessage = '正在使用本地夸克账号解析：' + ep.title
-    let result: PanPlayResult = await this.quarkPanRepository.resolve(this.panPlayRequest(ep), cookie)
-    if (result.ok && result.url.length > 0) {
-      this.playMessage = '本地夸克解析成功，正在进入播放页'
-      this.openPlayer(result.url, ep.title, this.nonEmptyText(result.cover, ep.pic),
-        result.source, result.message, result.headersJson)
-      return true
-    }
-    this.playMessage = this.nonEmptyText(result.message, '本地夸克解析失败，请检查账号或剧集数据')
-    return false
   }
 
   private panPlayRequest(ep: PlayEp): PanPlayRequest {
