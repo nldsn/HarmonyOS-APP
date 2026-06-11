@@ -50,6 +50,14 @@ export interface ResolverVodItem {
   vodRemarks: string
 }
 
+export interface SiteSearchResult {
+  siteKey: string
+  siteName: string
+  items: ResolverVodItem[]
+  isLoading: boolean
+  errorMsg: string
+}
+
 export interface ResolverSiteHomeResult {
   ok: boolean
   sourceId: string

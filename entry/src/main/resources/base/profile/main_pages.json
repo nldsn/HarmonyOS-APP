@@ -3,6 +3,7 @@
     "pages/MainPage",
     "pages/DetailPage",
     "pages/ConfigCenterPage",
-    "pages/PlayerPage"
+    "pages/PlayerPage",
+    "pages/SearchPage"
   ]
 }

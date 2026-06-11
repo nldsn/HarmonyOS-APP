@@ -1,4 +1,4 @@
-import { router } from '@kit.ArkUI'
+import { router, promptAction } from '@kit.ArkUI'
 import {
   ResolverCategoryItem,
   ResolverDefaults,
@@ -47,6 +47,7 @@ export struct HomePage {
   @State private activeCategoryIndex: number = 0
   @State private isLoading: boolean = false
   @State private isLoadingCategory: boolean = false
+  @State private isRefreshing: boolean = false
   @State private errorMsg: string = ''
   @State private handlerName: string = ''
   @State private lastLoadedSourceId: string = ''
@@ -73,7 +74,14 @@ export struct HomePage {
         this.buildError()
       } else if (this.categories.length > 0) {
         this.buildCategoryTabs()
-        this.buildVideoGrid()
+        Refresh({ refreshing: $$this.isRefreshing }) {
+          this.buildVideoGrid()
+        }
+        .onRefreshing(async () => {
+          await this.loadCurrentSiteHome()
+          this.isRefreshing = false
+        })
+        .layoutWeight(1)
       } else {
         this.buildEmpty()
       }
@@ -108,17 +116,21 @@ export struct HomePage {
       }
       Blank()
 
-      Button('刷新')
-        .fontSize(12)
-        .fontColor($r('app.color.hermes_orange'))
-        .height(32)
-        .padding({ left: 12, right: 12 })
-        .borderRadius(8)
-        .backgroundColor($r('app.color.background'))
-        .enabled(!this.isLoading && !this.isLoadingCategory)
-        .onClick(async () => {
-          await this.loadCurrentSiteHome()
+      Button() {
+        SymbolGlyph($r('sys.symbol.magnifyingglass'))
+          .fontSize(22)
+          .fontColor([$r('app.color.text_primary')])
+      }
+      .type(ButtonType.Circle)
+      .width(44).height(44)
+      .backgroundColor('transparent')
+      .onClick(() => {
+        router.pushUrl({
+          url: 'pages/SearchPage'
+        }).catch((err: Error) => {
+          promptAction.showToast({ message: '跳转搜索页失败: ' + err.message })
         })
+      })
     }
     .width('100%')
     .padding({ left: 16, top: 12 + this.statusBarTop, right: 16, bottom: 12 })
@@ -223,7 +235,7 @@ export struct HomePage {
         Column({ space: 8 }) {
           Blank()
           Text('该分类暂无数据').fontSize(14).fontColor($r('app.color.text_secondary'))
-          Text('可切换分类或刷新当前站点').fontSize(12).fontColor($r('app.color.text_secondary'))
+          Text('可切换分类或下拉刷新当前站点').fontSize(12).fontColor($r('app.color.text_secondary'))
           Blank()
         }.width('100%').layoutWeight(1)
       }
@@ -434,6 +446,7 @@ export struct HomePage {
     } finally {
       this.isLoading = false
       this.isLoadingCategory = false
+      this.isRefreshing = false
     }
   }
 

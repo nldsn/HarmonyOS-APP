@@ -7,7 +7,8 @@ import {
   ResolverPlayResult,
   ResolverSiteHomeResult,
   ResolverSitesResult,
-  ResolverVodDetail
+  ResolverVodDetail,
+  ResolverVodItem
 } from '../../common/model/ResolverModels'
 import { PanCookieProfile } from '../../common/model/PanModels'
 
@@ -84,6 +85,52 @@ export class ResolverRepository {
       throw new Error('分类内容解析失败')
     }
     return result
+  }
+
+  async getSearch(baseUrl: string, sourceId: string, siteKey: string, wd: string,
+    page: number = 1): Promise<ResolverCategoryResult> {
+    let endpoint = this.siteEndpoint(baseUrl, sourceId, siteKey, 'search')
+    let body = '{"wd":' + JSON.stringify(wd) + ',"pg":' + page.toString() + ',"page":' + page.toString() + '}'
+    let response = await this.httpClient.postJson(endpoint, body, 60000)
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw new Error('搜索请求失败: ' + response.statusCode.toString() + ' ' + response.body)
+    }
+    let result = JSON.parse(response.body) as Record<string, Object>
+    if (!result['ok']) {
+      throw new Error('搜索解析失败')
+    }
+    let raw = (result['data'] || {}) as Record<string, Object>
+    let list: Object[] = Array.isArray(raw['list']) ? raw['list'] as Object[] : []
+    if (list.length === 0 && Array.isArray(raw['data'])) {
+      list = raw['data'] as Object[]
+    } else if (list.length === 0 && Array.isArray(raw)) {
+      list = raw as Object[]
+    }
+
+    let items: ResolverVodItem[] = []
+    for (let i = 0; i < list.length; i++) {
+      let item = list[i] as Record<string, Object>
+      let pic = String(item['vod_pic'] || item['pic'] || '')
+      if (pic.startsWith('mac://')) {
+        pic = this.runtimePathUrl(baseUrl, sourceId, '/proxy?url=' + encodeURIComponent(pic.substring(6)))
+      }
+      items.push({
+        vodId: String(item['vod_id'] || item['id'] || ''),
+        vodName: String(item['vod_name'] || item['name'] || ''),
+        vodPic: pic,
+        vodRemarks: String(item['vod_remarks'] || item['remarks'] || '')
+      })
+    }
+
+    return {
+      ok: true,
+      sourceId,
+      siteKey,
+      typeId: 'search',
+      page: page,
+      pageCount: Number(raw['pagecount'] || raw['pageCount'] || 1),
+      items: items
+    }
   }
 
   async getDetail(baseUrl: string, sourceId: string, siteKey: string, vodId: string): Promise<ResolverVodDetail> {
