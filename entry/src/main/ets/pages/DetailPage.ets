@@ -10,7 +10,6 @@ import {
   ResolverVodDetail
 } from '../common/model/ResolverModels'
 import { HttpClient } from '../data/http/HttpClient'
-import { QuarkPanRepository } from '../data/repository/QuarkPanRepository'
 import { ResolverRepository } from '../data/repository/ResolverRepository'
 import { CacheStore } from '../data/storage/CacheStore'
 import { PanCookieStore } from '../data/storage/PanCookieStore'
@@ -69,7 +68,6 @@ struct DetailPage {
   @State typeName: string = ''
   @State vodYear: string = ''
   @State vodArea: string = ''
-  @State vodRemarks: string = ''
   @State vodDirector: string = ''
   @State vodActor: string = ''
   @State vodContent: string = ''
@@ -84,10 +82,8 @@ struct DetailPage {
   @State resolverBaseUrl: string = ResolverDefaults.BASE_URL
   @State resolverSourceId: string = ''
   @State siteKey: string = ''
-  @State siteName: string = ''
 
   private resolverRepository: ResolverRepository = new ResolverRepository(new HttpClient())
-  private quarkPanRepository: QuarkPanRepository = new QuarkPanRepository()
   private scrollerForScroll: Scroller = new Scroller()
   private menus: HdsNavigationMenuContentOptions = {
     value: [{
@@ -135,10 +131,6 @@ struct DetailPage {
       let key: string = p.site_key ?? ''
       if (key.length > 0) {
         this.siteKey = key
-      }
-      let siteDisplayName: string = p.site_name ?? ''
-      if (siteDisplayName.length > 0) {
-        this.siteName = siteDisplayName
       }
     }
     this.loadDetail()
@@ -542,20 +534,6 @@ struct DetailPage {
   }
 
   @Builder
-  buildTag(text: string) {
-    Text(text)
-      .fontSize(11)
-      .fontColor('#FFE0C0')
-      .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-      .margin({ right: 6, bottom: 6 })
-      .borderRadius(4)
-      .backgroundColor('#33FFFFFF')
-      .border({ width: 1, color: '#44FFFFFF' })
-  }
-
-
-
-  @Builder
   buildError() {
     Column({ space: 16 }) {
       Blank()
@@ -655,7 +633,6 @@ struct DetailPage {
     this.typeName = detail.typeName
     this.vodYear = detail.vodYear
     this.vodArea = detail.vodArea
-    this.vodRemarks = detail.vodRemarks
     this.vodDirector = detail.vodDirector
     this.vodActor = detail.vodActor
     this.vodContent = this.nonEmptyText(detail.vodContent, '暂无简介')
@@ -854,13 +831,6 @@ struct DetailPage {
     return '线路'
   }
 
-  private heroTitleSize(): number {
-    if (this.vodName.length > 10) {
-      return 34
-    }
-    return 44
-  }
-
   private metaLine(): string {
     let result: string = ''
     if (this.vodYear.length > 0) {
@@ -951,44 +921,11 @@ struct DetailPage {
     return size.toFixed(2) + units[idx]
   }
 
-  private panBadgeText(ep: PlayEp): string {
-    let text: string = ep.panType.toUpperCase()
-    if (text.length > 0) {
-      return text
-    }
-    if (ep.flag.length > 0) {
-      return ep.flag
-    }
-    return 'PAN'
-  }
-
-  private fileExtText(ep: PlayEp): string {
-    let ext: string = ep.fileExt.toUpperCase()
-    if (ext.length > 0 && ext.length <= 8) {
-      return ext
-    }
-    return 'FILE'
-  }
-
   private fileCardTitle(ep: PlayEp): string {
     if (ep.fileName.length > 0) {
       return ep.fileName
     }
     return ep.title
-  }
-
-  private fileCardSubTitle(ep: PlayEp): string {
-    let id: string = ep.fileId
-    if (id.length > 10) {
-      id = id.substring(0, 10)
-    }
-    if (id.length > 0) {
-      return '文件 ID ' + id
-    }
-    if (ep.shareId.length > 0) {
-      return '网盘分享 ' + ep.shareId
-    }
-    return '等待网盘缩略图'
   }
 
   private posterUrl(url: string): string {

@@ -2,12 +2,14 @@ import { ResolverDefaults, ResolverHealthResult, ResolverInspectResult } from '.
 import { SiteSimple } from '../common/model/SourceModels'
 import { HttpClient } from '../data/http/HttpClient'
 import { ResolverRepository } from '../data/repository/ResolverRepository'
+import { AppConfigStore } from '../data/storage/AppConfigStore'
+import { common } from '@kit.AbilityKit'
 
 @Component
 export struct SettingsPage {
   @StorageLink('resolverBaseUrl') resolverUrl: string = ResolverDefaults.BASE_URL
   @StorageLink('resolverSourceId') resolverSourceId: string = ''
-  @State private sourceUrl: string = 'https://9280.kstore.vip/cat/index.js.md5'
+  @StorageLink('sourceUrl') sourceUrl: string = 'https://9280.kstore.vip/cat/index.js.md5'
   @State private isLoading: boolean = false
   @State private statusMsg: string = ''
   @State private isError: boolean = false
@@ -81,6 +83,20 @@ export struct SettingsPage {
       if (loadedSites.length > 0) {
         this.siteList = loadedSites
       }
+      
+      try {
+        let context = getContext(this) as common.UIAbilityContext
+        let configStore = new AppConfigStore(context)
+        configStore.saveConfig({
+          resolverBaseUrl: this.resolverUrl,
+          sourceUrl: this.sourceUrl,
+          resolverSourceId: this.resolverSourceId,
+          siteList: this.siteList
+        })
+      } catch (e) {
+        // 忽略
+      }
+
       this.statusMsg = '远端解析成功，已加载 ' + loadedSites.length.toString() + ' 个站点'
       this.isError = false
     } catch (err) {

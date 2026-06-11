@@ -4,6 +4,8 @@ import { SiteSimple } from '../common/model/SourceModels'
 import { HomePage } from '../tabs/HomePage'
 import { LivePage } from '../tabs/LivePage'
 import { SettingsPage } from '../tabs/SettingsPage'
+import { AppConfigStore } from '../data/storage/AppConfigStore'
+import { common } from '@kit.AbilityKit'
 
 /**
  * 沉浸光感底部导航栏 — HdsTabs + barFloatingStyle
@@ -76,7 +78,7 @@ struct MainPage {
         .fontColor([
           this.activeTab === 0
             ? $r('app.color.hermes_orange')
-            : $r('app.color.text_secondary')
+            : $r('app.color.text_primary')
         ])
 
       Text($r('app.string.tab_home'))
@@ -85,7 +87,7 @@ struct MainPage {
         .fontColor(
           this.activeTab === 0
             ? $r('app.color.hermes_orange')
-            : $r('app.color.text_secondary')
+            : $r('app.color.text_primary')
         )
     }
     .width('100%')
@@ -107,7 +109,7 @@ struct MainPage {
         .fontColor([
           this.activeTab === 1
             ? $r('app.color.hermes_orange')
-            : $r('app.color.text_secondary')
+            : $r('app.color.text_primary')
         ])
 
       Text($r('app.string.tab_live'))
@@ -116,7 +118,7 @@ struct MainPage {
         .fontColor(
           this.activeTab === 1
             ? $r('app.color.hermes_orange')
-            : $r('app.color.text_secondary')
+            : $r('app.color.text_primary')
         )
     }
     .width('100%')
@@ -138,7 +140,7 @@ struct MainPage {
         .fontColor([
           this.activeTab === 2
             ? $r('app.color.hermes_orange')
-            : $r('app.color.text_secondary')
+            : $r('app.color.text_primary')
         ])
 
       Text($r('app.string.tab_settings'))
@@ -147,7 +149,7 @@ struct MainPage {
         .fontColor(
           this.activeTab === 2
             ? $r('app.color.hermes_orange')
-            : $r('app.color.text_secondary')
+            : $r('app.color.text_primary')
         )
     }
     .width('100%')
@@ -171,6 +173,21 @@ struct Index {
     AppStorage.setOrCreate<SiteSimple[]>('siteList', [])
     AppStorage.setOrCreate<string>('resolverBaseUrl', ResolverDefaults.BASE_URL)
     AppStorage.setOrCreate<string>('resolverSourceId', '')
+    AppStorage.setOrCreate<string>('sourceUrl', 'https://9280.kstore.vip/cat/index.js.md5')
+
+    try {
+      let context = getContext(this) as common.UIAbilityContext
+      let configStore = new AppConfigStore(context)
+      let config = configStore.getConfig()
+      if (config !== null) {
+        if (config.resolverBaseUrl) AppStorage.setOrCreate('resolverBaseUrl', config.resolverBaseUrl)
+        if (config.sourceUrl) AppStorage.setOrCreate('sourceUrl', config.sourceUrl)
+        if (config.resolverSourceId) AppStorage.setOrCreate('resolverSourceId', config.resolverSourceId)
+        if (config.siteList && config.siteList.length > 0) AppStorage.setOrCreate('siteList', config.siteList)
+      }
+    } catch (e) {
+      // 忽略
+    }
   }
 
   build() {
