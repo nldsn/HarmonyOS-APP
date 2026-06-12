@@ -2,6 +2,7 @@ import { router, promptAction } from '@kit.ArkUI'
 import {
   ResolverCategoryItem,
   ResolverDefaults,
+  ResolverVodDetail,
   ResolverVodItem
 } from '../common/model/ResolverModels'
 import { SiteSimple } from '../common/model/SourceModels'
@@ -54,6 +55,7 @@ export struct HomePage {
   @StorageProp('statusBarTop') statusBarTop: number = 44
 
   @StorageLink('homeSelectedSiteKey') selectedSiteKey: string = ''
+  @StorageLink('homeUsesShowcaseStyle') homeUsesShowcaseStyle: boolean = false
   @State private categories: CategoryWithVods[] = []
   @State private activeCategoryIndex: number = 0
   @State private isLoading: boolean = false
@@ -79,11 +81,32 @@ export struct HomePage {
   }
 
   build() {
-    if (this.isDoubanCurrentSite()) {
+    if (this.isLoading) {
+      this.buildHomeLoadingOnly()
+    } else if (this.homeUsesShowcaseStyle) {
       this.buildDoubanHome()
     } else {
       this.buildStandardHome()
     }
+  }
+
+  @Builder
+  buildHomeLoadingOnly() {
+    Column({ space: 12 }) {
+      Blank()
+      LoadingProgress()
+        .width(42)
+        .height(42)
+        .color($r('app.color.hermes_orange'))
+      Text('正在加载首页...')
+        .fontSize(14)
+        .fontColor($r('app.color.text_secondary'))
+      Blank()
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor($r('app.color.card_background'))
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 
   @Builder
@@ -290,7 +313,7 @@ export struct HomePage {
     Column({ space: 12 }) {
       Blank()
       LoadingProgress().width(42).height(42).color(Color.White)
-      Text('正在读取豆瓣推荐...')
+      Text('正在读取' + this.showcaseSourceName() + '推荐...')
         .fontSize(14)
         .fontColor('#CCFFFFFF')
       Blank()
@@ -304,7 +327,7 @@ export struct HomePage {
   buildDoubanEmpty() {
     Column({ space: 8 }) {
       Blank()
-      Text('暂无豆瓣推荐')
+      Text('暂无' + this.showcaseSourceName() + '推荐')
         .fontSize(16)
         .fontWeight(FontWeight.Bold)
         .fontColor(Color.White)
@@ -419,7 +442,7 @@ export struct HomePage {
         Column({ space: 10 }) {
           Blank()
           LoadingProgress().width(36).height(36).color(Color.White)
-          Text('正在整理豆瓣推荐...')
+          Text('正在整理推荐内容...')
             .fontSize(13)
             .fontColor('#CCFFFFFF')
           Blank()
@@ -567,10 +590,10 @@ export struct HomePage {
         }
       })
     }
-    .columnsTemplate('1fr 1fr')
-    .columnsGap(14)
-    .rowsGap(18)
-    .padding({ left: 22, right: 22, bottom: 16 })
+    .columnsTemplate('1fr 1fr 1fr')
+    .columnsGap(12)
+    .rowsGap(16)
+    .padding({ left: 18, right: 18, bottom: 16 })
   }
 
   @Builder
@@ -879,24 +902,72 @@ export struct HomePage {
 
   private openDoubanSearch(vod: VodItem): void {
     if (vod.vod_name.trim().length === 0) {
-      promptAction.showToast({ message: '豆瓣条目缺少片名，无法搜索' })
+      promptAction.showToast({ message: '条目缺少片名，无法搜索' })
       return
     }
     this.openSearchPage(vod.vod_name)
   }
 
-  private isDoubanCurrentSite(): boolean {
-    let site = this.currentSite()
-    if (site === null) {
-      return false
+  private showcaseSourceName(): string {
+    let name: string = this.currentSiteName().trim()
+    if (name.length > 0) {
+      return name
     }
-    return this.isDoubanSite(site)
+    return '内容'
   }
 
-  private isDoubanSite(site: SiteSimple): boolean {
-    let key: string = site.key.toLowerCase()
-    let name: string = site.name.toLowerCase()
-    return key.indexOf('douban') >= 0 || name.indexOf('豆瓣') >= 0
+  private firstLoadedVod(): VodItem | null {
+    if (this.activeCategoryIndex >= 0 && this.activeCategoryIndex < this.categories.length) {
+      let active: CategoryWithVods = this.categories[this.activeCategoryIndex]
+      if (active.vods.length > 0) {
+        return active.vods[0]
+      }
+    }
+    for (let i = 0; i < this.categories.length; i++) {
+      let category: CategoryWithVods = this.categories[i]
+      if (category.vods.length > 0) {
+        return category.vods[0]
+      }
+    }
+    return null
+  }
+
+  private async detectShowcaseMode(sourceId: string, baseUrl: string, siteKey: string): Promise<void> {
+    let site = this.currentSite()
+    if (site !== null && this.isConfigCenterSite(site)) {
+      this.homeUsesShowcaseStyle = false
+      return
+    }
+    let vod: VodItem | null = this.firstLoadedVod()
+    if (vod === null) {
+      this.homeUsesShowcaseStyle = false
+      return
+    }
+    if (vod.vod_id.trim().length === 0) {
+      this.homeUsesShowcaseStyle = true
+      return
+    }
+    try {
+      let detail: ResolverVodDetail = await this.resolverRepository.getDetail(baseUrl, sourceId, siteKey, vod.vod_id)
+      if (sourceId !== this.resolverSourceId || siteKey !== this.selectedSiteKey) {
+        return
+      }
+      this.homeUsesShowcaseStyle = !this.detailHasPlayableEpisodes(detail)
+    } catch (err) {
+      if (sourceId !== this.resolverSourceId || siteKey !== this.selectedSiteKey) {
+        return
+      }
+      this.homeUsesShowcaseStyle = true
+    }
+  }
+
+  private detailHasPlayableEpisodes(detail: ResolverVodDetail): boolean {
+    for (let i = 0; i < detail.playSources.length; i++) {
+      if (detail.playSources[i].episodes.length > 0) {
+        return true
+      }
+    }
+    return false
   }
 
   private doubanHeroVods(): VodItem[] {
@@ -963,7 +1034,7 @@ export struct HomePage {
     if (this.activeCategoryIndex >= 0 && this.activeCategoryIndex < this.categories.length) {
       return this.categories[this.activeCategoryIndex].type_name
     }
-    return '豆瓣推荐'
+    return this.showcaseSourceName() + '推荐'
   }
 
   private doubanSectionMeta(): string {
@@ -978,16 +1049,16 @@ export struct HomePage {
 
   private doubanHeroSubtitle(vod: VodItem): string {
     if (vod.vod_remarks.length > 0) {
-      return '豆瓣推荐 · ' + vod.vod_remarks
+      return this.showcaseSourceName() + '推荐 · ' + vod.vod_remarks
     }
-    return '豆瓣推荐 · 发现值得看的片单'
+    return this.showcaseSourceName() + '推荐 · 发现值得看的片单'
   }
 
   private doubanCardSubtitle(vod: VodItem): string {
     if (vod.vod_remarks.length > 0) {
       return vod.vod_remarks
     }
-    return '豆瓣条目推荐'
+    return '推荐条目'
   }
 
   private doubanRemarkTag(remark: string): string {
@@ -1095,10 +1166,13 @@ export struct HomePage {
   }
 
   private selectSite(siteKey: string): void {
+    this.isLoading = true
+    this.isLoadingCategory = false
     this.selectedSiteKey = siteKey
     this.categories = []
     this.configCenterPageUrl = ''
     this.activeCategoryIndex = 0
+    this.homeUsesShowcaseStyle = false
     this.loadCurrentSiteHome()
   }
 
@@ -1112,10 +1186,12 @@ export struct HomePage {
     if (site === null) {
       this.categories = []
       this.errorMsg = ''
+      this.homeUsesShowcaseStyle = false
       return
     }
     if (this.resolverBaseUrl.trim().length === 0 || this.resolverSourceId.length === 0) {
       this.categories = []
+      this.homeUsesShowcaseStyle = false
       this.errorMsg = '请先在设置页完成远端解析'
       return
     }
@@ -1128,6 +1204,7 @@ export struct HomePage {
     this.isLoadingCategory = false
     this.errorMsg = ''
     this.configCenterPageUrl = ''
+    this.homeUsesShowcaseStyle = false
     this.handlerName = '正在读取分类'
 
     try {
@@ -1147,11 +1224,13 @@ export struct HomePage {
       }
       if (this.categories.length > 0) {
         await this.loadCategory(0)
+        await this.detectShowcaseMode(sourceId, baseUrl, siteKey)
       }
     } catch (err) {
       this.categories = []
       this.errorMsg = this.errorText(err)
       this.handlerName = ''
+      this.homeUsesShowcaseStyle = false
     } finally {
       this.isLoading = false
       this.isLoadingCategory = false

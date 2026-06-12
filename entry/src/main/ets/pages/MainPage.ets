@@ -15,8 +15,7 @@ import { common } from '@kit.AbilityKit'
 
 @Component
 struct MainPage {
-  @StorageLink('siteList') siteList: SiteSimple[] = []
-  @StorageLink('homeSelectedSiteKey') homeSelectedSiteKey: string = ''
+  @StorageLink('homeUsesShowcaseStyle') homeUsesShowcaseStyle: boolean = false
 
   @State private activeTab: number = 0
   private controller: HdsTabsController = new HdsTabsController()
@@ -51,14 +50,14 @@ struct MainPage {
         },
         barBottomMargin: 28,
         gradientMask: {
-          maskColor: this.isDoubanHomeActive() ? '#00000000' : '#66F5F0EB',
+          maskColor: this.isShowcaseHomeActive() ? '#00000000' : '#66F5F0EB',
           maskHeight: 92
         },
         systemMaterialEffect: {
-          materialType: this.isDoubanHomeActive() ? hdsMaterial.MaterialType.IMMERSIVE : hdsMaterial.MaterialType.ADAPTIVE,
+          materialType: this.isShowcaseHomeActive() ? hdsMaterial.MaterialType.IMMERSIVE : hdsMaterial.MaterialType.ADAPTIVE,
           materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
         },
-        barOpacity: this.isDoubanHomeActive() ? 0.82 : 1
+        barOpacity: this.isShowcaseHomeActive() ? 0.82 : 1
       })
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
       .animationDuration(200)
@@ -71,7 +70,7 @@ struct MainPage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(this.isDoubanHomeActive() ? '#111214' : $r('app.color.background'))
+    .backgroundColor(this.isShowcaseHomeActive() ? '#111214' : $r('app.color.background'))
   }
 
   // ── Tab 0: 首页 ──────────────────────────────────
@@ -167,30 +166,8 @@ struct MainPage {
     })
   }
 
-  private isDoubanHomeActive(): boolean {
-    if (this.activeTab !== 0) {
-      return false
-    }
-    let site = this.currentHomeSite()
-    if (site === null) {
-      return false
-    }
-    let key: string = site.key.toLowerCase()
-    let name: string = site.name.toLowerCase()
-    return key.indexOf('douban') >= 0 || name.indexOf('豆瓣') >= 0
-  }
-
-  private currentHomeSite(): SiteSimple | null {
-    if (this.siteList.length === 0) {
-      return null
-    }
-    for (let i = 0; i < this.siteList.length; i++) {
-      let site: SiteSimple = this.siteList[i]
-      if (site.key === this.homeSelectedSiteKey) {
-        return site
-      }
-    }
-    return this.siteList[0]
+  private isShowcaseHomeActive(): boolean {
+    return this.activeTab === 0 && this.homeUsesShowcaseStyle
   }
 }
 
@@ -205,6 +182,7 @@ struct Index {
     AppStorage.setOrCreate<string>('resolverBaseUrl', ResolverDefaults.BASE_URL)
     AppStorage.setOrCreate<string>('resolverSourceId', '')
     AppStorage.setOrCreate<string>('homeSelectedSiteKey', '')
+    AppStorage.setOrCreate<boolean>('homeUsesShowcaseStyle', false)
     AppStorage.setOrCreate<string>('sourceUrl', 'https://9280.kstore.vip/cat/index.js.md5')
 
     try {

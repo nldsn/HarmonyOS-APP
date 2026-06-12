@@ -82,6 +82,7 @@ export struct SettingsPage {
       this.inspectResult = result
       if (loadedSites.length > 0) {
         this.siteList = loadedSites
+        AppStorage.setOrCreate<boolean>('homeUsesShowcaseStyle', false)
       }
       
       try {
