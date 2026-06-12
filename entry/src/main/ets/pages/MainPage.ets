@@ -15,6 +15,9 @@ import { common } from '@kit.AbilityKit'
 
 @Component
 struct MainPage {
+  @StorageLink('siteList') siteList: SiteSimple[] = []
+  @StorageLink('homeSelectedSiteKey') homeSelectedSiteKey: string = ''
+
   @State private activeTab: number = 0
   private controller: HdsTabsController = new HdsTabsController()
 
@@ -39,6 +42,7 @@ struct MainPage {
       .barPosition(BarPosition.End)
       .vertical(false)
       .barOverlap(true)
+      .barBackgroundColor('#00000000')
       .barFloatingStyle({
         barWidth: {
           smallWidth: 200,
@@ -47,13 +51,14 @@ struct MainPage {
         },
         barBottomMargin: 28,
         gradientMask: {
-          maskColor: '#66F5F0EB',
+          maskColor: this.isDoubanHomeActive() ? '#00000000' : '#66F5F0EB',
           maskHeight: 92
         },
         systemMaterialEffect: {
-          materialType: hdsMaterial.MaterialType.ADAPTIVE,
+          materialType: this.isDoubanHomeActive() ? hdsMaterial.MaterialType.IMMERSIVE : hdsMaterial.MaterialType.ADAPTIVE,
           materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-        }
+        },
+        barOpacity: this.isDoubanHomeActive() ? 0.82 : 1
       })
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
       .animationDuration(200)
@@ -66,7 +71,7 @@ struct MainPage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(this.isDoubanHomeActive() ? '#111214' : $r('app.color.background'))
   }
 
   // ── Tab 0: 首页 ──────────────────────────────────
@@ -161,6 +166,32 @@ struct MainPage {
       this.activeTab = 2
     })
   }
+
+  private isDoubanHomeActive(): boolean {
+    if (this.activeTab !== 0) {
+      return false
+    }
+    let site = this.currentHomeSite()
+    if (site === null) {
+      return false
+    }
+    let key: string = site.key.toLowerCase()
+    let name: string = site.name.toLowerCase()
+    return key.indexOf('douban') >= 0 || name.indexOf('豆瓣') >= 0
+  }
+
+  private currentHomeSite(): SiteSimple | null {
+    if (this.siteList.length === 0) {
+      return null
+    }
+    for (let i = 0; i < this.siteList.length; i++) {
+      let site: SiteSimple = this.siteList[i]
+      if (site.key === this.homeSelectedSiteKey) {
+        return site
+      }
+    }
+    return this.siteList[0]
+  }
 }
 
 // ── Entry 入口 ────────────────────────────────────
@@ -173,6 +204,7 @@ struct Index {
     AppStorage.setOrCreate<SiteSimple[]>('siteList', [])
     AppStorage.setOrCreate<string>('resolverBaseUrl', ResolverDefaults.BASE_URL)
     AppStorage.setOrCreate<string>('resolverSourceId', '')
+    AppStorage.setOrCreate<string>('homeSelectedSiteKey', '')
     AppStorage.setOrCreate<string>('sourceUrl', 'https://9280.kstore.vip/cat/index.js.md5')
 
     try {

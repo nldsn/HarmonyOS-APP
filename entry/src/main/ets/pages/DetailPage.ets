@@ -197,6 +197,42 @@ struct DetailPage {
             enableScrollEffect: true,
             scrollEffectType: ScrollEffectType.GRADIENT_BLUR,
           },
+          originalStyle: {
+            backgroundStyle: {
+              backgroundColor: '#00000000',
+              maskExtraHeight: 0
+            },
+            contentStyle: {
+              menuStyle: {
+                iconColor: Color.White,
+                textColor: Color.White
+              },
+              backIconStyle: {
+                iconColor: Color.White
+              },
+              dividerStyle: {
+                dividerColor: '#00000000'
+              }
+            }
+          },
+          scrollEffectStyle: {
+            backgroundStyle: {
+              backgroundColor: '#00000000',
+              maskExtraHeight: 0
+            },
+            contentStyle: {
+              menuStyle: {
+                iconColor: Color.White,
+                textColor: Color.White
+              },
+              backIconStyle: {
+                iconColor: Color.White
+              },
+              dividerStyle: {
+                dividerColor: '#00000000'
+              }
+            }
+          },
           systemMaterialEffect: {
             materialType: hdsMaterial.MaterialType.IMMERSIVE,
             materialLevel: this.materialLevel

@@ -9,6 +9,8 @@ import { HttpClient } from '../data/http/HttpClient'
 import { ResolverRepository } from '../data/repository/ResolverRepository'
 import {
   HdsNavigation,
+  HdsNavigationMenuContentOptions,
+  HdsNavigationMenuItemOptions,
   HdsNavigationTitleMode,
   ScrollEffectType,
   hdsMaterial
@@ -51,7 +53,7 @@ export struct HomePage {
   @StorageLink('resolverSourceId') resolverSourceId: string = ''
   @StorageProp('statusBarTop') statusBarTop: number = 44
 
-  @State private selectedSiteKey: string = ''
+  @StorageLink('homeSelectedSiteKey') selectedSiteKey: string = ''
   @State private categories: CategoryWithVods[] = []
   @State private activeCategoryIndex: number = 0
   @State private isLoading: boolean = false
@@ -80,35 +82,105 @@ export struct HomePage {
     if (this.isDoubanCurrentSite()) {
       this.buildDoubanHome()
     } else {
-      Column() {
-        this.buildTopBar()
-
-        Divider().color($r('app.color.background'))
-
-        if (this.isLoading) {
-          this.buildLoading()
-        } else if (this.siteList.length === 0) {
-          this.buildEmpty()
-        } else if (this.errorMsg.length > 0 && this.categories.length === 0) {
-          this.buildError()
-        } else if (this.categories.length > 0) {
-          this.buildCategoryTabs()
-          Refresh({ refreshing: $$this.isRefreshing }) {
-            this.buildVideoGrid()
-          }
-          .onRefreshing(async () => {
-            await this.loadCurrentSiteHome()
-            this.isRefreshing = false
-          })
-          .layoutWeight(1)
-        } else {
-          this.buildEmpty()
-        }
-      }
-      .width('100%')
-      .height('100%')
-      .backgroundColor($r('app.color.card_background'))
+      this.buildStandardHome()
     }
+  }
+
+  @Builder
+  buildStandardHome() {
+    Column() {
+      HdsNavigation() {
+        Column() {
+          Column().height(56 + this.statusBarTop)
+
+          Divider().color($r('app.color.background'))
+
+          if (this.isLoading) {
+            this.buildLoading()
+          } else if (this.siteList.length === 0) {
+            this.buildEmpty()
+          } else if (this.errorMsg.length > 0 && this.categories.length === 0) {
+            this.buildError()
+          } else if (this.categories.length > 0) {
+            this.buildCategoryTabs()
+            Refresh({ refreshing: $$this.isRefreshing }) {
+              this.buildVideoGrid()
+            }
+            .onRefreshing(async () => {
+              await this.loadCurrentSiteHome()
+              this.isRefreshing = false
+            })
+            .layoutWeight(1)
+          } else {
+            this.buildEmpty()
+          }
+        }
+        .width('100%')
+        .height('100%')
+      }
+      .mode(NavigationMode.Stack)
+      .titleBar({
+        content: {
+          title: { mainTitle: '首页' },
+          menu: this.homeNavigationMenus()
+        },
+        style: {
+          scrollEffectOpts: {
+            enableScrollEffect: true,
+            scrollEffectType: ScrollEffectType.GRADIENT_BLUR
+          },
+          originalStyle: {
+            backgroundStyle: {
+              backgroundColor: '#00000000',
+              maskExtraHeight: 0
+            },
+            contentStyle: {
+              titleStyle: {
+                mainTitleColor: $r('app.color.text_primary')
+              },
+              menuStyle: {
+                iconColor: $r('app.color.text_primary'),
+                textColor: $r('app.color.text_primary')
+              },
+              dividerStyle: {
+                dividerColor: '#00000000'
+              }
+            }
+          },
+          scrollEffectStyle: {
+            backgroundStyle: {
+              backgroundColor: '#00000000',
+              maskExtraHeight: 0
+            },
+            contentStyle: {
+              titleStyle: {
+                mainTitleColor: $r('app.color.text_primary')
+              },
+              menuStyle: {
+                iconColor: $r('app.color.text_primary'),
+                textColor: $r('app.color.text_primary')
+              },
+              dividerStyle: {
+                dividerColor: '#00000000'
+              }
+            }
+          },
+          systemMaterialEffect: {
+            materialType: hdsMaterial.MaterialType.IMMERSIVE,
+            materialLevel: this.materialLevel
+          }
+        },
+        avoidLayoutSafeArea: true,
+        enableComponentSafeArea: false
+      })
+      .hideBackButton(true)
+      .titleMode(HdsNavigationTitleMode.MINI)
+      .layoutWeight(1)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor($r('app.color.card_background'))
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 
   @Builder
@@ -150,13 +222,49 @@ export struct HomePage {
       .mode(NavigationMode.Stack)
       .titleBar({
         content: {
-          title: { mainTitle: '' },
-          stackBuilder: (): void => { this.buildDoubanNavBar() }
+          title: { mainTitle: '首页' },
+          menu: this.homeNavigationMenus()
         },
         style: {
           scrollEffectOpts: {
             enableScrollEffect: true,
             scrollEffectType: ScrollEffectType.GRADIENT_BLUR
+          },
+          originalStyle: {
+            backgroundStyle: {
+              backgroundColor: '#00000000',
+              maskExtraHeight: 0
+            },
+            contentStyle: {
+              titleStyle: {
+                mainTitleColor: Color.White
+              },
+              menuStyle: {
+                iconColor: Color.White,
+                textColor: Color.White
+              },
+              dividerStyle: {
+                dividerColor: '#00000000'
+              }
+            }
+          },
+          scrollEffectStyle: {
+            backgroundStyle: {
+              backgroundColor: '#00000000',
+              maskExtraHeight: 0
+            },
+            contentStyle: {
+              titleStyle: {
+                mainTitleColor: Color.White
+              },
+              menuStyle: {
+                iconColor: Color.White,
+                textColor: Color.White
+              },
+              dividerStyle: {
+                dividerColor: '#00000000'
+              }
+            }
           },
           systemMaterialEffect: {
             materialType: hdsMaterial.MaterialType.IMMERSIVE,
@@ -175,42 +283,6 @@ export struct HomePage {
     .height('100%')
     .backgroundColor(DOUBAN_DARK_BG)
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-  }
-
-  @Builder
-  buildDoubanNavBar() {
-    Row() {
-      Button() {
-        Text('首页')
-          .fontSize(28)
-          .fontWeight(FontWeight.Bolder)
-          .fontColor(Color.White)
-      }
-      .height(44)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .bindMenu(this.menuItems())
-
-      Blank()
-
-      Button() {
-        SymbolGlyph($r('sys.symbol.magnifyingglass'))
-          .fontSize(23)
-          .fontColor([Color.White])
-      }
-      .type(ButtonType.Circle)
-      .width(46)
-      .height(46)
-      .backgroundColor('#26FFFFFF')
-      .border({ width: 1, color: '#28FFFFFF' })
-      .onClick(() => {
-        this.openSearchPage()
-      })
-    }
-    .width('100%')
-    .height('100%')
-    .padding({ left: 20, right: 20 })
-    .alignItems(VerticalAlign.Center)
   }
 
   @Builder
@@ -927,6 +999,35 @@ export struct HomePage {
       return text.replace('评分：', '')
     }
     return text
+  }
+
+  private homeNavigationMenus(): HdsNavigationMenuContentOptions {
+    let value: HdsNavigationMenuItemOptions[] = []
+    value.push({
+      content: {
+        label: '搜索',
+        icon: $r('sys.symbol.magnifyingglass'),
+        action: () => {
+          this.openSearchPage()
+        }
+      }
+    })
+    for (let i = 0; i < this.siteList.length; i++) {
+      let site: SiteSimple = this.siteList[i]
+      value.push({
+        content: {
+          label: site.name,
+          icon: $r('sys.symbol.ellipsis_circle'),
+          action: () => {
+            this.selectSite(site.key)
+          }
+        }
+      })
+    }
+    return {
+      value: value,
+      maxCount: 2
+    }
   }
 
   // ── 站点下拉菜单 ──
