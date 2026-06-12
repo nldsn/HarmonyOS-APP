@@ -55,6 +55,50 @@
     {
       "name": "star_gold",
       "value": "#F5A623"
+    },
+    {
+      "name": "detail_background",
+      "value": "#2C241E"
+    },
+    {
+      "name": "detail_text_light",
+      "value": "#EBE0D8"
+    },
+    {
+      "name": "detail_text_medium",
+      "value": "#8E8378"
+    },
+    {
+      "name": "detail_text_muted",
+      "value": "#6E6660"
+    },
+    {
+      "name": "detail_button_bg",
+      "value": "#3A3530"
+    },
+    {
+      "name": "detail_button_text_secondary",
+      "value": "#A09A94"
+    },
+    {
+      "name": "detail_poster_placeholder",
+      "value": "#0D0B09"
+    },
+    {
+      "name": "detail_episode_placeholder",
+      "value": "#1A1715"
+    },
+    {
+      "name": "detail_error_bg",
+      "value": "#0D0B09"
+    },
+    {
+      "name": "detail_text_intro",
+      "value": "#E0D6CC"
+    },
+    {
+      "name": "detail_status_text",
+      "value": "#8E8378"
     }
   ]
 }

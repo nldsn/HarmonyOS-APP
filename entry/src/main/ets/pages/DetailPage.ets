@@ -1,8 +1,8 @@
-import { router } from '@kit.ArkUI'
+import { router, Prompt } from '@kit.ArkUI'
 import { HdsNavigation, HdsNavigationTitleMode, HdsNavigationMenuContentOptions,
   ScrollEffectType, hdsMaterial } from '@kit.UIDesignKit'
 import { common } from '@kit.AbilityKit'
-import { PanCookieProfile, PanPlayRequest, PanPlayResult } from '../common/model/PanModels'
+import { PanCookieProfile, PanPlayRequest } from '../common/model/PanModels'
 import {
   ResolverDefaults,
   ResolverEpisode,
@@ -79,9 +79,12 @@ struct DetailPage {
   @State showFullIntro: boolean = false
   @State activeSourceIndex: number = 0
   @State activeEpisodeIndex: number = 0
-  @State resolverBaseUrl: string = ResolverDefaults.BASE_URL
-  @State resolverSourceId: string = ''
+  @StorageLink('resolverBaseUrl') resolverBaseUrl: string = ResolverDefaults.BASE_URL
+  @StorageLink('resolverSourceId') resolverSourceId: string = ''
+  @StorageProp('statusBarTop') statusBarTop: number = 44
   @State siteKey: string = ''
+  // 沉浸光感材质等级：默认自适应(ADAPTIVE)，设备不支持 IMMERSIVE 时降级为 SMOOTH
+  @State private materialLevel: hdsMaterial.MaterialLevel = hdsMaterial.MaterialLevel.ADAPTIVE
 
   private resolverRepository: ResolverRepository = new ResolverRepository(new HttpClient())
   private scrollerForScroll: Scroller = new Scroller()
@@ -89,22 +92,37 @@ struct DetailPage {
     value: [{
       content: {
         label: '搜索',
-        icon: $r('sys.symbol.magnifyingglass')
+        icon: $r('sys.symbol.magnifyingglass'),
+        action: () => {
+          router.pushUrl({ url: 'pages/SearchPage' })
+        }
       }
     }, {
       content: {
         label: '喜欢',
-        icon: $r('sys.symbol.heart')
+        icon: $r('sys.symbol.heart'),
+        action: () => {
+          Prompt.showToast({ message: '暂无收藏功能', duration: 1500 })
+        }
       }
     }, {
       content: {
         label: '更多',
-        icon: $r('sys.symbol.ellipsis_circle')
+        icon: $r('sys.symbol.ellipsis_circle'),
+        action: () => {
+          Prompt.showToast({ message: '更多选项开发中', duration: 1500 })
+        }
       }
     }]
   }
 
   aboutToAppear(): void {
+    // 查询当前设备支持的材质能力，按官方建议选择沉浸光感等级
+    let materialTypes: Array<hdsMaterial.MaterialType> = hdsMaterial.getSystemMaterialTypes()
+    if (materialTypes.indexOf(hdsMaterial.MaterialType.IMMERSIVE) < 0) {
+      this.materialLevel = hdsMaterial.MaterialLevel.SMOOTH
+    }
+
     let params = router.getParams()
     if (params !== null && params !== undefined) {
       let p: DetailRouteParams = params as DetailRouteParams
@@ -138,11 +156,11 @@ struct DetailPage {
 
   build() {
     Column() {
-      if (this.errorMsg.length > 0 && this.sources.length === 0 && !this.isLoading) {
-        this.buildError()
-      } else {
-        HdsNavigation() {
-          Scroll(this.scrollerForScroll) {
+      HdsNavigation() {
+        Scroll(this.scrollerForScroll) {
+          if (this.isErrorState()) {
+            this.buildError()
+          } else {
             Column() {
               this.buildPosterHero()
               this.buildIntroBlock()
@@ -160,42 +178,41 @@ struct DetailPage {
             }
             .width('100%')
             .constraintSize({ minHeight: '100%' })
-            .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
           }
-          .scrollBar(BarState.Auto)
-          .height('100%')
-          .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
         }
-        .mode(NavigationMode.Stack)
-        .titleBar({
-          content: {
-            title: {
-              mainTitle: '',
-            },
-            menu: this.menus,
-          },
-          style: {
-            scrollEffectOpts: {
-              enableScrollEffect: true,
-              scrollEffectType: ScrollEffectType.GRADIENT_BLUR,
-            },
-            systemMaterialEffect: {
-              materialType: hdsMaterial.MaterialType.IMMERSIVE,
-              materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-            },
-          },
-          avoidLayoutSafeArea: true,
-          enableComponentSafeArea: false
-        })
-        .bindToScrollable([this.scrollerForScroll])
-        .hideBackButton(false)
-        .titleMode(HdsNavigationTitleMode.MINI)
-        .layoutWeight(1)
+        .scrollBar(BarState.Auto)
+        .height('100%')
+        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
       }
+      .mode(NavigationMode.Stack)
+      .titleBar({
+        content: {
+          title: {
+            mainTitle: '',
+          },
+          menu: this.menus,
+        },
+        style: {
+          scrollEffectOpts: {
+            enableScrollEffect: true,
+            scrollEffectType: ScrollEffectType.GRADIENT_BLUR,
+          },
+          systemMaterialEffect: {
+            materialType: hdsMaterial.MaterialType.IMMERSIVE,
+            materialLevel: this.materialLevel
+          },
+        },
+        avoidLayoutSafeArea: true,
+        enableComponentSafeArea: false
+      })
+      .bindToScrollable([this.scrollerForScroll])
+      .hideBackButton(false)
+      .titleMode(HdsNavigationTitleMode.MINI)
+      .layoutWeight(1)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#5A524A')
+    .backgroundColor($r('app.color.detail_background'))
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 
@@ -207,7 +224,7 @@ struct DetailPage {
         .height(600)
         .objectFit(ImageFit.Cover)
         .syncLoad(false)
-        .backgroundColor('#241F1A')
+        .backgroundColor($r('app.color.detail_poster_placeholder'))
         .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
 
       Column()
@@ -252,7 +269,7 @@ struct DetailPage {
       Text(this.metaLine())
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
-        .fontColor('#F4EFE8')
+        .fontColor($r('app.color.detail_text_light'))
         .textAlign(TextAlign.Center)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -279,7 +296,7 @@ struct DetailPage {
       Text(this.continueSubTitle())
         .fontSize(12)
         .fontWeight(FontWeight.Medium)
-        .fontColor('#5D5A56')
+        .fontColor($r('app.color.detail_button_text_secondary'))
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .width('100%')
@@ -290,7 +307,7 @@ struct DetailPage {
     .alignSelf(ItemAlign.Center)
     .justifyContent(FlexAlign.Center)
     .borderRadius(14)
-    .backgroundColor('#F8F6F2')
+    .backgroundColor($r('app.color.detail_button_bg'))
     .shadow({ radius: 12, color: '#42000000', offsetY: 5 })
     .enabled(!this.isResolvingPlay)
     .onClick(async () => {
@@ -304,7 +321,7 @@ struct DetailPage {
       Text(this.vodContent)
         .fontSize(15)
         .fontWeight(FontWeight.Medium)
-        .fontColor('#F2ECE4')
+        .fontColor($r('app.color.detail_text_intro'))
         .lineHeight(24)
         .maxLines(this.showFullIntro ? 12 : 3)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -313,7 +330,7 @@ struct DetailPage {
       if (this.vodDirector.length > 0 || this.vodActor.length > 0) {
         Text(this.creditLine())
           .fontSize(12)
-          .fontColor('#BEB6AA')
+          .fontColor($r('app.color.detail_text_medium'))
           .lineHeight(18)
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -342,7 +359,7 @@ struct DetailPage {
                 .maxLines(1)
               SymbolGlyph($r('sys.symbol.chevron_down'))
                 .fontSize(16)
-                .fontColor(['#BEB6AA'])
+                .fontColor([$r('app.color.detail_text_medium')])
             }
           }
           .height(34)
@@ -352,14 +369,20 @@ struct DetailPage {
 
           Blank()
 
-          this.buildSourceTool($r('sys.symbol.magnifyingglass'), true)
-          this.buildSourceTool($r('sys.symbol.backward_fill'), false)
-          this.buildSourceTool($r('sys.symbol.forward_end_fill'), false)
+          this.buildSourceTool($r('sys.symbol.magnifyingglass'), true, () => {
+            Prompt.showToast({ message: '当前源搜索开发中', duration: 1500 })
+          })
+          this.buildSourceTool($r('sys.symbol.backward_fill'), false, () => {
+            this.switchSource(-1)
+          })
+          this.buildSourceTool($r('sys.symbol.forward_end_fill'), false, () => {
+            this.switchSource(1)
+          })
 
           Text('更多')
             .fontSize(14)
             .fontWeight(FontWeight.Bold)
-            .fontColor('#BEB6AA')
+            .fontColor($r('app.color.detail_text_medium'))
             .margin({ left: 4 })
         }
         .width('100%')
@@ -374,7 +397,7 @@ struct DetailPage {
   }
 
   @Builder
-  buildSourceTool(icon: Resource, active: boolean) {
+  buildSourceTool(icon: Resource, active: boolean, onClickAction: () => void) {
     Button() {
       if (active) {
         SymbolGlyph(icon)
@@ -383,13 +406,14 @@ struct DetailPage {
       } else {
         SymbolGlyph(icon)
           .fontSize(18)
-          .fontColor(['#928C84'])
+          .fontColor([$r('app.color.detail_text_muted')])
       }
     }
     .width(34)
     .height(34)
     .borderRadius(17)
     .backgroundColor(Color.Transparent)
+    .onClick(onClickAction)
   }
 
   @Builder
@@ -432,7 +456,7 @@ struct DetailPage {
             .width(188)
             .height(106)
             .borderRadius(18)
-            .border({ width: 3, color: '#F8F6F2' })
+            .border({ width: 3, color: $r('app.color.detail_button_bg') })
         }
 
         Text(this.episodeBadgeText(epIdx))
@@ -458,7 +482,7 @@ struct DetailPage {
       if (ep.fileName && ep.fileName !== ep.title) {
         Text(ep.fileName)
           .fontSize(12)
-          .fontColor('#BEB6AA')
+          .fontColor($r('app.color.detail_text_medium'))
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width(188)
@@ -480,7 +504,7 @@ struct DetailPage {
         .objectFit(ImageFit.Cover)
         .syncLoad(false)
         .borderRadius(18)
-        .backgroundColor('#2B2722')
+        .backgroundColor($r('app.color.detail_episode_placeholder'))
     } else {
       Column() {
         Text(this.fileCardTitle(ep))
@@ -497,7 +521,7 @@ struct DetailPage {
       .padding(14)
       .justifyContent(FlexAlign.Center)
       .borderRadius(18)
-      .backgroundColor('#2B2722')
+      .backgroundColor($r('app.color.detail_episode_placeholder'))
       .linearGradient({
         direction: GradientDirection.Bottom,
         colors: [
@@ -522,7 +546,7 @@ struct DetailPage {
         }
         Text(this.playMessage)
           .fontSize(12)
-          .fontColor('#D8CEC2')
+          .fontColor($r('app.color.detail_status_text'))
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
@@ -536,7 +560,6 @@ struct DetailPage {
   @Builder
   buildError() {
     Column({ space: 16 }) {
-      Blank()
       Text('!')
         .fontSize(36)
         .fontWeight(FontWeight.Bold)
@@ -548,7 +571,7 @@ struct DetailPage {
         .border({ width: 2, color: $r('app.color.hermes_orange') })
       Text(this.errorMsg)
         .fontSize(15)
-        .fontColor('#BEB6AA')
+        .fontColor($r('app.color.detail_text_medium'))
         .textAlign(TextAlign.Center)
         .padding({ left: 40, right: 40 })
       Button('重试')
@@ -561,11 +584,32 @@ struct DetailPage {
         .onClick(async () => {
           await this.loadDetail()
         })
-      Blank()
     }
     .width('100%')
-    .layoutWeight(1)
-    .backgroundColor('#201D19')
+    .height('100%')
+    .constraintSize({ minHeight: '100%' })
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .backgroundColor($r('app.color.detail_error_bg'))
+  }
+
+  private isErrorState(): boolean {
+    return this.errorMsg.length > 0 && this.sources.length === 0 && !this.isLoading
+  }
+
+  private switchSource(direction: number): void {
+    if (this.sources.length === 0) {
+      return
+    }
+    let newIndex: number = this.activeSourceIndex + direction
+    if (newIndex < 0) {
+      newIndex = this.sources.length - 1
+    } else if (newIndex >= this.sources.length) {
+      newIndex = 0
+    }
+    this.activeSourceIndex = newIndex
+    this.activeEpisodeIndex = 0
+    this.playMessage = ''
   }
 
   private sourceMenuItems(): MenuItem[] {

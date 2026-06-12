@@ -9,7 +9,6 @@ import { SearchHistoryStore } from '../data/storage/SearchHistoryStore'
 import {
   HdsNavigation,
   HdsNavigationTitleMode,
-  HdsNavigationMenuContentOptions,
   ScrollEffectType,
   hdsMaterial
 } from '@kit.UIDesignKit'
@@ -17,11 +16,12 @@ import {
 /**
  * 搜索页 — 沉浸光感
  *
- * 顶部：HDS 沉浸式导航栏（返回按钮 + 菜单按钮，带沉浸光感材质）+ 搜索框。
+ * 顶部：HDS 沉浸式导航栏（只保留返回按钮 + 内嵌搜索框），搜索框通过 stackBuilder
+ * 嵌入标题栏区域，继承 IMMERSIVE 沉浸光感材质。
  * 下面依次：搜索记录 → 站点（横向胶囊）→ 影片列表（网格）。
  * 全页单一纵向滚动，内容滑入沉浸式导航栏下方触发渐变模糊与光感材质。
  *
- * 沉浸光感等级按官方“自定义沉浸光感”指引，依据设备材质能力自适应选择。
+ * 沉浸光感等级按官方”自定义沉浸光感”指引，依据设备材质能力自适应选择。
  */
 
 const EMPTY_POSTER: string = 'https://via.placeholder.com/300x420/333333/F37021?text=Poster'
@@ -63,9 +63,6 @@ struct SearchPage {
             // 顶部避让沉浸式导航栏（标题栏 56vp + 状态栏高度）
             Column().height(56 + this.statusBarTop)
 
-            // —— 顶部搜索框 ——
-            this.buildSearchBar()
-
             if (!this.hasSearched) {
               if (this.history.length > 0) {
                 this.buildHistorySection()
@@ -95,17 +92,17 @@ struct SearchPage {
       .mode(NavigationMode.Stack)
       .titleBar({
         content: {
-          title: { mainTitle: '搜索' },
-          menu: this.buildSearchMenus()
+          title: { mainTitle: '' },
+          stackBuilder: (): void => { this.buildNavSearchBox() }
         },
         style: {
           scrollEffectOpts: {
             enableScrollEffect: true,
             scrollEffectType: ScrollEffectType.GRADIENT_BLUR
           },
-          // 标题栏按钮（返回 + 菜单）沉浸光感：自适应系统材质，等级按设备能力自定义
+          // 标题栏沉浸光感：标准 IMMERSIVE 材质，等级按设备能力自适应
           systemMaterialEffect: {
-            materialType: hdsMaterial.MaterialType.ADAPTIVE,
+            materialType: hdsMaterial.MaterialType.IMMERSIVE,
             materialLevel: this.materialLevel
           }
         },
@@ -124,70 +121,35 @@ struct SearchPage {
   }
 
   // ═══════════════════════════════════════════════
-  // 搜索框
+  // 导航栏内嵌搜索框（通过 stackBuilder 嵌入，继承沉浸光感材质）
+  // — 使用 Search 组件（自带搜索图标 + 清除按钮 + 内置圆角背景）
+  // — 外层 Row left:48 避让返回按钮
   // ═══════════════════════════════════════════════
   @Builder
-  buildSearchBar() {
-    Row({ space: 10 }) {
-      // 输入字段：前置放大镜 + 内联清除
-      Row({ space: 8 }) {
-        SymbolGlyph($r('sys.symbol.magnifyingglass'))
-          .fontSize(18)
-          .fontColor([$r('app.color.text_secondary')])
-
-        TextInput({ placeholder: '搜索影片名称', text: this.keyword })
-          .layoutWeight(1)
-          .height(40)
-          .backgroundColor(Color.Transparent)
-          .placeholderColor($r('app.color.text_secondary'))
-          .fontColor($r('app.color.text_primary'))
-          .fontSize(15)
-          .padding(0)
-          .caretColor($r('app.color.hermes_orange'))
-          .onChange((value: string) => {
-            this.keyword = value
-          })
-          .onSubmit(() => {
-            this.doSearch()
-          })
-
-        if (this.keyword.length > 0) {
-          SymbolGlyph($r('sys.symbol.xmark_circle_fill'))
-            .fontSize(18)
-            .fontColor([$r('app.color.text_secondary')])
-            .onClick(() => {
-              this.keyword = ''
-            })
-        }
-      }
+  buildNavSearchBox() {
+    Row() {
+      Search({
+        value: this.keyword,
+        placeholder: '搜索影片名称'
+      }).searchButton('搜索')
       .layoutWeight(1)
-      .height(44)
-      .padding({ left: 14, right: 14 })
-      .borderRadius(22)
-      .backgroundColor($r('app.color.background'))
-
-      Text('搜索')
-        .fontSize(15)
-        .fontWeight(FontWeight.Bold)
-        .height(44)
-        .padding({ left: 18, right: 18 })
-        .textAlign(TextAlign.Center)
-        .borderRadius(22)
-        .linearGradient(
-          this.canSearch()
-            ? { direction: GradientDirection.Right, colors: [['#FF9554', 0.0], ['#F37021', 1.0]] }
-            : {
-                direction: GradientDirection.Right,
-                colors: [[$r('app.color.tag_background'), 0.0], [$r('app.color.tag_background'), 1.0]]
-              }
-        )
-        .fontColor(this.canSearch() ? Color.White : $r('app.color.text_secondary'))
-        .onClick(() => {
-          this.doSearch()
-        })
+      .height(40)
+      .placeholderColor($r('app.color.text_secondary'))
+      .fontColor($r('app.color.text_primary'))
+      .caretStyle({ width: 2, color: $r('app.color.hermes_orange') })
+      .cancelButton({
+        style: CancelButtonStyle.INPUT
+      })
+      .onChange((value: string) => {
+        this.keyword = value
+      })
+      .onSubmit(() => {
+        this.doSearch()
+      })
     }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 4, bottom: 12 })
+    .width('90%')
+    .height('100%')
+    .padding({ left: 58, right: 8 })
     .alignItems(VerticalAlign.Center)
   }
 
@@ -566,30 +528,8 @@ struct SearchPage {
   }
 
   // ═══════════════════════════════════════════════
-  // 标题栏菜单（HDS 沉浸光感按钮）
-  // ═══════════════════════════════════════════════
-  private buildSearchMenus(): HdsNavigationMenuContentOptions {
-    return {
-      value: [
-        {
-          content: {
-            label: '清空',
-            icon: $r('sys.symbol.trash'),
-            action: () => {
-              this.resetSearch()
-            }
-          }
-        }
-      ]
-    }
-  }
-
-  // ═══════════════════════════════════════════════
   // Helpers
   // ═══════════════════════════════════════════════
-  private canSearch(): boolean {
-    return this.keyword.trim().length > 0 && !this.isSearching
-  }
 
   private historyStore(): SearchHistoryStore {
     let context = getContext(this) as common.UIAbilityContext
