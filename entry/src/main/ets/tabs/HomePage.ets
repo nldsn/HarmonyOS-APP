@@ -34,6 +34,9 @@ interface SiteMenuItem {
 }
 
 const EMPTY_POSTER: string = 'https://via.placeholder.com/300x420/333333/F37021?text=Poster'
+const DOUBAN_DARK_BG: string = '#111214'
+const DOUBAN_PANEL_BG: string = '#191A1D'
+const DOUBAN_MUTED_TEXT: string = '#8D8F96'
 
 @Component
 export struct HomePage {
@@ -53,6 +56,7 @@ export struct HomePage {
   @State private lastLoadedSourceId: string = ''
   @State private lastLoadedSiteKey: string = ''
   @State private configCenterPageUrl: string = ''
+  @State private doubanHeroIndex: number = 0
 
   private resolverRepository: ResolverRepository = new ResolverRepository(new HttpClient())
 
@@ -61,21 +65,61 @@ export struct HomePage {
   }
 
   build() {
+    if (this.isDoubanCurrentSite()) {
+      this.buildDoubanHome()
+    } else {
+      Column() {
+        this.buildTopBar()
+
+        Divider().color($r('app.color.background'))
+
+        if (this.isLoading) {
+          this.buildLoading()
+        } else if (this.siteList.length === 0) {
+          this.buildEmpty()
+        } else if (this.errorMsg.length > 0 && this.categories.length === 0) {
+          this.buildError()
+        } else if (this.categories.length > 0) {
+          this.buildCategoryTabs()
+          Refresh({ refreshing: $$this.isRefreshing }) {
+            this.buildVideoGrid()
+          }
+          .onRefreshing(async () => {
+            await this.loadCurrentSiteHome()
+            this.isRefreshing = false
+          })
+          .layoutWeight(1)
+        } else {
+          this.buildEmpty()
+        }
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor($r('app.color.card_background'))
+    }
+  }
+
+  @Builder
+  buildDoubanHome() {
     Column() {
-      this.buildTopBar()
-
-      Divider().color($r('app.color.background'))
-
       if (this.isLoading) {
-        this.buildLoading()
+        this.buildDoubanLoading()
       } else if (this.siteList.length === 0) {
-        this.buildEmpty()
+        this.buildDoubanEmpty()
       } else if (this.errorMsg.length > 0 && this.categories.length === 0) {
-        this.buildError()
+        this.buildDoubanError()
       } else if (this.categories.length > 0) {
-        this.buildCategoryTabs()
         Refresh({ refreshing: $$this.isRefreshing }) {
-          this.buildVideoGrid()
+          Scroll() {
+            Column() {
+              this.buildDoubanHero()
+              this.buildDoubanCategoryTabs()
+              this.buildDoubanCategorySection()
+              Column().height(40)
+            }
+            .width('100%')
+          }
+          .scrollBar(BarState.Off)
         }
         .onRefreshing(async () => {
           await this.loadCurrentSiteHome()
@@ -83,12 +127,392 @@ export struct HomePage {
         })
         .layoutWeight(1)
       } else {
-        this.buildEmpty()
+        this.buildDoubanEmpty()
       }
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor(DOUBAN_DARK_BG)
+  }
+
+  @Builder
+  buildDoubanLoading() {
+    Column({ space: 12 }) {
+      Blank()
+      LoadingProgress().width(42).height(42).color(Color.White)
+      Text('正在读取豆瓣推荐...')
+        .fontSize(14)
+        .fontColor('#CCFFFFFF')
+      Blank()
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(DOUBAN_DARK_BG)
+  }
+
+  @Builder
+  buildDoubanEmpty() {
+    Column({ space: 8 }) {
+      Blank()
+      Text('暂无豆瓣推荐')
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+      Text('请先在设置页解析订阅源')
+        .fontSize(12)
+        .fontColor(DOUBAN_MUTED_TEXT)
+      Blank()
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(DOUBAN_DARK_BG)
+  }
+
+  @Builder
+  buildDoubanError() {
+    Column({ space: 12 }) {
+      Blank()
+      Text('!')
+        .fontSize(28)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.hermes_orange'))
+        .width(40)
+        .height(40)
+        .textAlign(TextAlign.Center)
+        .borderRadius(20)
+        .border({ width: 2, color: $r('app.color.hermes_orange') })
+      Text(this.errorMsg)
+        .fontSize(14)
+        .fontColor('#CCFFFFFF')
+        .textAlign(TextAlign.Center)
+        .padding({ left: 40, right: 40 })
+      Blank()
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(DOUBAN_DARK_BG)
+  }
+
+  @Builder
+  buildDoubanHero() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      if (this.doubanHeroVods().length > 0) {
+        Swiper() {
+          ForEach(this.doubanHeroVods(), (vod: VodItem) => {
+            Stack({ alignContent: Alignment.BottomStart }) {
+              Image(vod.vod_pic)
+                .width('100%')
+                .height('100%')
+                .objectFit(ImageFit.Cover)
+                .syncLoad(false)
+                .backgroundColor('#241F1A')
+
+              Column()
+                .width('100%')
+                .height('100%')
+                .linearGradient({
+                  direction: GradientDirection.Bottom,
+                  colors: [
+                    ['#33000000', 0.0],
+                    ['#12000000', 0.42],
+                    ['#AA000000', 0.78],
+                    [DOUBAN_DARK_BG, 1.0]
+                  ]
+                })
+
+              Column({ space: 8 }) {
+                Row({ space: 8 }) {
+                  if (vod.vod_remarks.length > 0) {
+                    Text(this.doubanRemarkTag(vod.vod_remarks))
+                      .fontSize(12)
+                      .fontColor(Color.White)
+                      .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                      .borderRadius(7)
+                      .backgroundColor('#66000000')
+                  }
+                  Text(vod.vod_name)
+                    .fontSize(24)
+                    .fontWeight(FontWeight.Bolder)
+                    .fontColor(Color.White)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+                .width('100%')
+
+                Text(this.doubanHeroSubtitle(vod))
+                  .fontSize(15)
+                  .fontColor('#E6FFFFFF')
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%')
+              }
+              .width('100%')
+              .padding({ left: 22, right: 22, bottom: 72 })
+            }
+            .width('100%')
+            .height('100%')
+            .onClick(() => {
+              this.openDoubanHint(vod)
+            })
+          })
+        }
+        .autoPlay(true)
+        .interval(4200)
+        .loop(true)
+        .indicator(false)
+        .onChange((index: number) => {
+          this.doubanHeroIndex = index
+        })
+      } else {
+        Column({ space: 10 }) {
+          Blank()
+          LoadingProgress().width(36).height(36).color(Color.White)
+          Text('正在整理豆瓣推荐...')
+            .fontSize(13)
+            .fontColor('#CCFFFFFF')
+          Blank()
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('#242528')
+      }
+
+      Column()
+        .width('100%')
+        .height(120)
+        .linearGradient({
+          direction: GradientDirection.Bottom,
+          colors: [
+            ['#00000000', 0.0],
+            [DOUBAN_DARK_BG, 1.0]
+          ]
+        })
+
+      Column() {
+        Row() {
+          Button() {
+            Text('首页')
+              .fontSize(38)
+              .fontWeight(FontWeight.Bolder)
+              .fontColor(Color.White)
+          }
+          .height(52)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .bindMenu(this.menuItems())
+
+          Blank()
+
+          Button() {
+            SymbolGlyph($r('sys.symbol.magnifyingglass'))
+              .fontSize(30)
+              .fontColor([Color.White])
+          }
+          .type(ButtonType.Circle)
+          .width(58)
+          .height(58)
+          .backgroundColor('#26FFFFFF')
+          .border({ width: 1, color: '#28FFFFFF' })
+          .onClick(() => {
+            this.openSearchPage()
+          })
+        }
+        .width('100%')
+        .padding({ left: 22, top: this.statusBarTop + 26, right: 22 })
+
+        Blank()
+
+        this.buildDoubanHeroIndicator(this.doubanHeroVods().length)
+      }
+      .width('100%')
+      .height('100%')
+    }
+    .width('100%')
+    .height(640)
+  }
+
+  @Builder
+  buildDoubanHeroIndicator(count: number) {
+    if (count > 0) {
+      Row({ space: 9 }) {
+        ForEach(this.doubanIndicatorItems(count), (item: number) => {
+          Column()
+            .height(4)
+            .layoutWeight(1)
+            .borderRadius(2)
+            .backgroundColor(item === this.doubanActiveIndicatorIndex(count) ? Color.White : '#4DFFFFFF')
+        })
+      }
+      .width('100%')
+      .height(12)
+      .padding({ left: 22, right: 22, bottom: 8 })
+    }
+  }
+
+  @Builder
+  buildDoubanCategoryTabs() {
+    Scroll() {
+      Row({ space: 12 }) {
+        ForEach(this.categories, (cat: CategoryWithVods, index: number) => {
+          this.buildDoubanCategoryChip(cat, index)
+        })
+      }
+      .padding({ left: 22, right: 22, top: 16, bottom: 18 })
+    }
+    .scrollable(ScrollDirection.Horizontal)
+    .scrollBar(BarState.Off)
+    .width('100%')
+    .backgroundColor(DOUBAN_DARK_BG)
+  }
+
+  @Builder
+  buildDoubanCategoryChip(cat: CategoryWithVods, index: number) {
+    Row({ space: 8 }) {
+      Text(this.doubanCategoryIcon(cat.type_id))
+        .fontSize(16)
+        .fontColor(this.activeCategoryIndex === index ? DOUBAN_DARK_BG : '#CCFFFFFF')
+      Text(cat.type_name)
+        .fontSize(15)
+        .fontWeight(this.activeCategoryIndex === index ? FontWeight.Bold : FontWeight.Medium)
+        .fontColor(this.activeCategoryIndex === index ? DOUBAN_DARK_BG : '#D6D7DA')
+        .maxLines(1)
+    }
+    .height(46)
+    .padding({ left: 18, right: 18 })
+    .borderRadius(23)
+    .backgroundColor(this.activeCategoryIndex === index ? Color.White : '#242528')
+    .onClick(async () => {
+      await this.selectCategory(index)
+    })
+  }
+
+  @Builder
+  buildDoubanCategorySection() {
+    Column({ space: 14 }) {
+      Row() {
+        Text(this.doubanSectionTitle())
+          .fontSize(28)
+          .fontWeight(FontWeight.Bolder)
+          .fontColor(Color.White)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        Blank()
+
+        Text(this.doubanSectionMeta())
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(DOUBAN_MUTED_TEXT)
+      }
+      .width('100%')
+      .padding({ left: 22, right: 22 })
+
+      if (this.activeCategoryIndex >= this.categories.length) {
+        Text('')
+          .width('100%')
+          .height(180)
+      } else if (this.isLoadingCategory) {
+        Column({ space: 12 }) {
+          LoadingProgress().width(32).height(32).color(Color.White)
+          Text('加载中...')
+            .fontSize(13)
+            .fontColor(DOUBAN_MUTED_TEXT)
+        }
+        .width('100%')
+        .height(220)
+        .justifyContent(FlexAlign.Center)
+      } else if (this.categories[this.activeCategoryIndex].vods.length > 0) {
+        this.buildDoubanPosterRows()
+      } else {
+        Column({ space: 8 }) {
+          Text('该分类暂无数据')
+            .fontSize(15)
+            .fontColor('#CCFFFFFF')
+          Text('可切换分类或下拉刷新当前站点')
+            .fontSize(12)
+            .fontColor(DOUBAN_MUTED_TEXT)
+        }
+        .width('100%')
+        .height(180)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+      }
+    }
+    .width('100%')
+    .backgroundColor(DOUBAN_DARK_BG)
+  }
+
+  @Builder
+  buildDoubanPosterRows() {
+    Grid() {
+      ForEach(this.categories[this.activeCategoryIndex].vods, (vod: VodItem) => {
+        GridItem() {
+          this.buildDoubanPosterCard(vod)
+        }
+      })
+    }
+    .columnsTemplate('1fr 1fr')
+    .columnsGap(14)
+    .rowsGap(18)
+    .padding({ left: 22, right: 22, bottom: 16 })
+  }
+
+  @Builder
+  buildDoubanPosterCard(vod: VodItem) {
+    Column({ space: 8 }) {
+      Stack({ alignContent: Alignment.BottomEnd }) {
+        Image(vod.vod_pic)
+          .width('100%')
+          .aspectRatio(0.72)
+          .objectFit(ImageFit.Cover)
+          .syncLoad(false)
+          .borderRadius(10)
+          .backgroundColor(DOUBAN_PANEL_BG)
+
+        Column()
+          .width('100%')
+          .height(72)
+          .borderRadius(10)
+          .linearGradient({
+            direction: GradientDirection.Bottom,
+            colors: [
+              ['#00000000', 0.0],
+              ['#B3000000', 1.0]
+            ]
+          })
+
+        if (vod.vod_remarks.length > 0) {
+          Text(this.doubanRemarkTag(vod.vod_remarks))
+            .fontSize(12)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+            .margin({ right: 8, bottom: 8 })
+            .borderRadius(8)
+            .backgroundColor('#80000000')
+        }
+      }
+      .width('100%')
+
+      Text(vod.vod_name)
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+
+      Text(this.doubanCardSubtitle(vod))
+        .fontSize(13)
+        .fontColor(DOUBAN_MUTED_TEXT)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+    }
+    .width('100%')
+    .onClick(() => {
+      this.openDoubanHint(vod)
+    })
   }
 
   @Builder
@@ -125,11 +549,7 @@ export struct HomePage {
       .width(44).height(44)
       .backgroundColor('transparent')
       .onClick(() => {
-        router.pushUrl({
-          url: 'pages/SearchPage'
-        }).catch((err: Error) => {
-          promptAction.showToast({ message: '跳转搜索页失败: ' + err.message })
-        })
+        this.openSearchPage()
       })
     }
     .width('100%')
@@ -319,6 +739,136 @@ export struct HomePage {
         }
       })
     })
+  }
+
+  private openSearchPage(): void {
+    router.pushUrl({
+      url: 'pages/SearchPage'
+    }).catch((err: Error) => {
+      promptAction.showToast({ message: '跳转搜索页失败: ' + err.message })
+    })
+  }
+
+  private openDoubanHint(vod: VodItem): void {
+    promptAction.showToast({
+      message: vod.vod_name + ' 来自豆瓣推荐，请切换可播放站点或搜索片名'
+    })
+  }
+
+  private isDoubanCurrentSite(): boolean {
+    let site = this.currentSite()
+    if (site === null) {
+      return false
+    }
+    return this.isDoubanSite(site)
+  }
+
+  private isDoubanSite(site: SiteSimple): boolean {
+    let key: string = site.key.toLowerCase()
+    let name: string = site.name.toLowerCase()
+    return key.indexOf('douban') >= 0 || name.indexOf('豆瓣') >= 0
+  }
+
+  private doubanHeroVods(): VodItem[] {
+    if (this.categories.length === 0) {
+      return []
+    }
+    let first: CategoryWithVods = this.categories[0]
+    if (first.vods.length > 0) {
+      return first.vods
+    }
+    if (this.activeCategoryIndex >= 0 && this.activeCategoryIndex < this.categories.length) {
+      return this.categories[this.activeCategoryIndex].vods
+    }
+    return []
+  }
+
+  private doubanIndicatorItems(count: number): number[] {
+    let result: number[] = []
+    let maxCount: number = count
+    if (maxCount > 6) {
+      maxCount = 6
+    }
+    for (let i = 0; i < maxCount; i++) {
+      result.push(i)
+    }
+    return result
+  }
+
+  private doubanActiveIndicatorIndex(count: number): number {
+    let maxCount: number = count
+    if (maxCount > 6) {
+      maxCount = 6
+    }
+    if (maxCount <= 0) {
+      return 0
+    }
+    let index: number = this.doubanHeroIndex
+    while (index >= maxCount) {
+      index = index - maxCount
+    }
+    while (index < 0) {
+      index = index + maxCount
+    }
+    return index
+  }
+
+  private doubanCategoryIcon(typeId: string): string {
+    if (typeId.indexOf('rank') >= 0) {
+      return '榜'
+    }
+    if (typeId.indexOf('tv') >= 0) {
+      return '剧'
+    }
+    if (typeId.indexOf('show') >= 0) {
+      return '综'
+    }
+    if (typeId.indexOf('movie') >= 0) {
+      return '影'
+    }
+    return '荐'
+  }
+
+  private doubanSectionTitle(): string {
+    if (this.activeCategoryIndex >= 0 && this.activeCategoryIndex < this.categories.length) {
+      return this.categories[this.activeCategoryIndex].type_name
+    }
+    return '豆瓣推荐'
+  }
+
+  private doubanSectionMeta(): string {
+    if (this.activeCategoryIndex >= 0 && this.activeCategoryIndex < this.categories.length) {
+      let count: number = this.categories[this.activeCategoryIndex].vods.length
+      if (count > 0) {
+        return count.toString() + ' 部'
+      }
+    }
+    return '推荐'
+  }
+
+  private doubanHeroSubtitle(vod: VodItem): string {
+    if (vod.vod_remarks.length > 0) {
+      return '豆瓣推荐 · ' + vod.vod_remarks
+    }
+    return '豆瓣推荐 · 发现值得看的片单'
+  }
+
+  private doubanCardSubtitle(vod: VodItem): string {
+    if (vod.vod_remarks.length > 0) {
+      return vod.vod_remarks
+    }
+    return '豆瓣条目推荐'
+  }
+
+  private doubanRemarkTag(remark: string): string {
+    let text: string = remark.trim()
+    if (text.length === 0) {
+      return '推荐'
+    }
+    if (text.indexOf('评分：') === 0) {
+      return text.replace('评分：', '')
+    }
+    return text
   }
 
   // ── 站点下拉菜单 ──
