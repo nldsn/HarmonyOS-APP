@@ -139,7 +139,6 @@ struct SearchPage {
       .placeholderColor($r('app.color.text_secondary'))
       .fontColor($r('app.color.text_primary'))
       .caretStyle({ width: 2, color: $r('app.color.hermes_orange') })
-      .backgroundColor('rgba(242, 243, 245,0.18)')
       .cancelButton({
         style: CancelButtonStyle.INPUT
       })
@@ -366,7 +365,7 @@ struct SearchPage {
       }
     }
     .width('100%')
-    .layoutWeight(1)
+    .layoutWeight(this.siteResults.length === 0 ? 1 : 0)
   }
 
   // 影片网格：手动分行（每行 3 列），内容自适应高度随外层滚动，避免嵌套纵向滚动
