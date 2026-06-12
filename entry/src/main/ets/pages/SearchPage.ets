@@ -26,6 +26,11 @@ import {
 
 const EMPTY_POSTER: string = 'https://via.placeholder.com/300x420/333333/F37021?text=Poster'
 
+interface SearchRouteParams {
+  keyword?: string
+  wd?: string
+}
+
 @Entry
 @Component
 struct SearchPage {
@@ -54,6 +59,7 @@ struct SearchPage {
       this.materialLevel = hdsMaterial.MaterialLevel.SMOOTH
     }
     this.history = this.historyStore().getHistory()
+    this.applyRouteKeyword()
   }
 
   build() {
@@ -560,6 +566,24 @@ struct SearchPage {
 
   private selectedSiteItems(): ResolverVodItem[] {
     return this.selectedSite().items
+  }
+
+  private applyRouteKeyword(): void {
+    let params = router.getParams()
+    if (params === null || params === undefined) {
+      return
+    }
+    let p: SearchRouteParams = params as SearchRouteParams
+    let keyword: string = p.keyword ?? ''
+    if (keyword.trim().length === 0) {
+      keyword = p.wd ?? ''
+    }
+    let kw: string = keyword.trim()
+    if (kw.length === 0) {
+      return
+    }
+    this.keyword = kw
+    this.doSearch()
   }
 
   // ═══════════════════════════════════════════════

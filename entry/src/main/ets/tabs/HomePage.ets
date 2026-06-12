@@ -7,6 +7,12 @@ import {
 import { SiteSimple } from '../common/model/SourceModels'
 import { HttpClient } from '../data/http/HttpClient'
 import { ResolverRepository } from '../data/repository/ResolverRepository'
+import {
+  HdsNavigation,
+  HdsNavigationTitleMode,
+  ScrollEffectType,
+  hdsMaterial
+} from '@kit.UIDesignKit'
 
 /**
  * 首页 — 视频网格展示（UI 样式模板，数据为硬编码示例）
@@ -57,10 +63,16 @@ export struct HomePage {
   @State private lastLoadedSiteKey: string = ''
   @State private configCenterPageUrl: string = ''
   @State private doubanHeroIndex: number = 0
+  @State private materialLevel: hdsMaterial.MaterialLevel = hdsMaterial.MaterialLevel.ADAPTIVE
 
   private resolverRepository: ResolverRepository = new ResolverRepository(new HttpClient())
+  private doubanScroller: Scroller = new Scroller()
 
   aboutToAppear(): void {
+    let materialTypes: Array<hdsMaterial.MaterialType> = hdsMaterial.getSystemMaterialTypes()
+    if (materialTypes.indexOf(hdsMaterial.MaterialType.IMMERSIVE) < 0) {
+      this.materialLevel = hdsMaterial.MaterialLevel.SMOOTH
+    }
     this.loadCurrentSiteHomeIfReady()
   }
 
@@ -102,37 +114,103 @@ export struct HomePage {
   @Builder
   buildDoubanHome() {
     Column() {
-      if (this.isLoading) {
-        this.buildDoubanLoading()
-      } else if (this.siteList.length === 0) {
-        this.buildDoubanEmpty()
-      } else if (this.errorMsg.length > 0 && this.categories.length === 0) {
-        this.buildDoubanError()
-      } else if (this.categories.length > 0) {
+      HdsNavigation() {
         Refresh({ refreshing: $$this.isRefreshing }) {
-          Scroll() {
+          Scroll(this.doubanScroller) {
             Column() {
-              this.buildDoubanHero()
-              this.buildDoubanCategoryTabs()
-              this.buildDoubanCategorySection()
-              Column().height(40)
+              if (this.isLoading) {
+                this.buildDoubanLoading()
+              } else if (this.siteList.length === 0) {
+                this.buildDoubanEmpty()
+              } else if (this.errorMsg.length > 0 && this.categories.length === 0) {
+                this.buildDoubanError()
+              } else if (this.categories.length > 0) {
+                this.buildDoubanHero()
+                this.buildDoubanCategoryTabs()
+                this.buildDoubanCategorySection()
+                Column().height(40)
+              } else {
+                this.buildDoubanEmpty()
+              }
             }
             .width('100%')
+            .constraintSize({ minHeight: '100%' })
+            .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
           }
           .scrollBar(BarState.Off)
+          .height('100%')
+          .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
         }
         .onRefreshing(async () => {
           await this.loadCurrentSiteHome()
           this.isRefreshing = false
         })
         .layoutWeight(1)
-      } else {
-        this.buildDoubanEmpty()
       }
+      .mode(NavigationMode.Stack)
+      .titleBar({
+        content: {
+          title: { mainTitle: '' },
+          stackBuilder: (): void => { this.buildDoubanNavBar() }
+        },
+        style: {
+          scrollEffectOpts: {
+            enableScrollEffect: true,
+            scrollEffectType: ScrollEffectType.GRADIENT_BLUR
+          },
+          systemMaterialEffect: {
+            materialType: hdsMaterial.MaterialType.IMMERSIVE,
+            materialLevel: this.materialLevel
+          }
+        },
+        avoidLayoutSafeArea: true,
+        enableComponentSafeArea: false
+      })
+      .bindToScrollable([this.doubanScroller])
+      .hideBackButton(true)
+      .titleMode(HdsNavigationTitleMode.MINI)
+      .layoutWeight(1)
     }
     .width('100%')
     .height('100%')
     .backgroundColor(DOUBAN_DARK_BG)
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+  }
+
+  @Builder
+  buildDoubanNavBar() {
+    Row() {
+      Button() {
+        Text('首页')
+          .fontSize(28)
+          .fontWeight(FontWeight.Bolder)
+          .fontColor(Color.White)
+      }
+      .height(44)
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .bindMenu(this.menuItems())
+
+      Blank()
+
+      Button() {
+        SymbolGlyph($r('sys.symbol.magnifyingglass'))
+          .fontSize(23)
+          .fontColor([Color.White])
+      }
+      .type(ButtonType.Circle)
+      .width(46)
+      .height(46)
+      .backgroundColor('#26FFFFFF')
+      .border({ width: 1, color: '#28FFFFFF' })
+      .onClick(() => {
+        this.openSearchPage()
+      })
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 20, right: 20 })
+    .alignItems(VerticalAlign.Center)
   }
 
   @Builder
@@ -210,6 +288,7 @@ export struct HomePage {
               Column()
                 .width('100%')
                 .height('100%')
+                .hitTestBehavior(HitTestMode.None)
                 .linearGradient({
                   direction: GradientDirection.Bottom,
                   colors: [
@@ -252,13 +331,14 @@ export struct HomePage {
             .width('100%')
             .height('100%')
             .onClick(() => {
-              this.openDoubanHint(vod)
+              this.openDoubanSearch(vod)
             })
           })
         }
         .autoPlay(true)
         .interval(4200)
         .loop(true)
+        .disableSwipe(false)
         .indicator(false)
         .onChange((index: number) => {
           this.doubanHeroIndex = index
@@ -280,6 +360,7 @@ export struct HomePage {
       Column()
         .width('100%')
         .height(120)
+        .hitTestBehavior(HitTestMode.None)
         .linearGradient({
           direction: GradientDirection.Bottom,
           colors: [
@@ -288,44 +369,7 @@ export struct HomePage {
           ]
         })
 
-      Column() {
-        Row() {
-          Button() {
-            Text('首页')
-              .fontSize(38)
-              .fontWeight(FontWeight.Bolder)
-              .fontColor(Color.White)
-          }
-          .height(52)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .bindMenu(this.menuItems())
-
-          Blank()
-
-          Button() {
-            SymbolGlyph($r('sys.symbol.magnifyingglass'))
-              .fontSize(30)
-              .fontColor([Color.White])
-          }
-          .type(ButtonType.Circle)
-          .width(58)
-          .height(58)
-          .backgroundColor('#26FFFFFF')
-          .border({ width: 1, color: '#28FFFFFF' })
-          .onClick(() => {
-            this.openSearchPage()
-          })
-        }
-        .width('100%')
-        .padding({ left: 22, top: this.statusBarTop + 26, right: 22 })
-
-        Blank()
-
-        this.buildDoubanHeroIndicator(this.doubanHeroVods().length)
-      }
-      .width('100%')
-      .height('100%')
+      this.buildDoubanHeroIndicator(this.doubanHeroVods().length)
     }
     .width('100%')
     .height(640)
@@ -511,7 +555,7 @@ export struct HomePage {
     }
     .width('100%')
     .onClick(() => {
-      this.openDoubanHint(vod)
+      this.openDoubanSearch(vod)
     })
   }
 
@@ -741,7 +785,19 @@ export struct HomePage {
     })
   }
 
-  private openSearchPage(): void {
+  private openSearchPage(keyword: string = ''): void {
+    let kw: string = keyword.trim()
+    if (kw.length > 0) {
+      router.pushUrl({
+        url: 'pages/SearchPage',
+        params: {
+          keyword: kw
+        }
+      }).catch((err: Error) => {
+        promptAction.showToast({ message: '跳转搜索页失败: ' + err.message })
+      })
+      return
+    }
     router.pushUrl({
       url: 'pages/SearchPage'
     }).catch((err: Error) => {
@@ -749,10 +805,12 @@ export struct HomePage {
     })
   }
 
-  private openDoubanHint(vod: VodItem): void {
-    promptAction.showToast({
-      message: vod.vod_name + ' 来自豆瓣推荐，请切换可播放站点或搜索片名'
-    })
+  private openDoubanSearch(vod: VodItem): void {
+    if (vod.vod_name.trim().length === 0) {
+      promptAction.showToast({ message: '豆瓣条目缺少片名，无法搜索' })
+      return
+    }
+    this.openSearchPage(vod.vod_name)
   }
 
   private isDoubanCurrentSite(): boolean {
